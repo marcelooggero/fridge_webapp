@@ -687,7 +687,13 @@ function renderChart(data) {
   const highLine = data.map(() => thresholds.high);
   const lowLine  = data.map(() => thresholds.low);
 
-  if (chart) chart.destroy();
+  // Destruir cualquier instancia previa registrada en Chart.js
+  if (chart) {
+    chart.destroy();
+    chart = null;
+  }
+  const existingChart = Chart.getChart(canvas);
+  if (existingChart) existingChart.destroy();
 
   chart = new Chart(canvas, {
     type: 'line',
