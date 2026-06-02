@@ -569,13 +569,32 @@ function saveApiUrl() {
   setInterval(loadData, REFRESH_MS);
 }
 
-function saveThresholds() {
-  thresholds.high = parseFloat(document.getElementById('threshHigh').value);
-  thresholds.low  = parseFloat(document.getElementById('threshLow').value);
-  localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-  document.getElementById('statRange').textContent =
-    `${thresholds.low}°C — ${thresholds.high}°C`;
-  if (chart) evaluateAlerts(chart.data.datasets[0].data.slice(-1)[0]?.y ?? null);
+async function saveThresholds() {
+    thresholds.high = parseFloat(document.getElementById('threshHigh').value);
+    thresholds.low  = parseFloat(document.getElementById('threshLow').value);
+    localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+
+    // Actualizar Device Twin en Azure
+    try {
+        const res = await fetch('https://TU-FUNCTION-APP.azurewebsites.net/api/updateThresholds', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                alertTempHigh: thresholds.high,
+                alertTempLow:  thresholds.low
+            })
+        });
+
+        if (res.ok) {
+            document.getElementById('statRange').textContent =
+                `${thresholds.low}°C — ${thresholds.high}°C`;
+            alert(`✅ Umbrales guardados en Azure: ${thresholds.low}°C — ${thresholds.high}°C`);
+        } else {
+            alert('❌ Error al guardar en Azure');
+        }
+    } catch (err) {
+        alert('❌ Error de conexión: ' + err.message);
+    }
 }
 
 // ─────────────────────────────────────────────
