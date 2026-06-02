@@ -545,7 +545,7 @@ let chart      = null;
 document.addEventListener('DOMContentLoaded', async () => {
     // Cargar umbrales desde Device Twin al arrancar
     try {
-        const res  = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net.azurewebsites.net/api/getThresholds');
+        const res  = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getThresholds');
         if (res.ok) {
             const data = await res.json();
             thresholds.high = data.alertTempHigh;
