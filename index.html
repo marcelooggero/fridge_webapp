@@ -590,7 +590,7 @@ async function saveThresholds() {
 
     // Actualizar Device Twin en Azure
     try {
-        const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net.azurewebsites.net/api/updateThresholds', {
+        const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/updateThresholds', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
