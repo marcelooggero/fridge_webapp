@@ -588,7 +588,6 @@ async function saveThresholds() {
     thresholds.low  = parseFloat(document.getElementById('threshLow').value);
     localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
 
-    // Actualizar Device Twin en Azure
     try {
         const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/updateThresholds', {
             method: 'POST',
@@ -602,7 +601,15 @@ async function saveThresholds() {
         if (res.ok) {
             document.getElementById('statRange').textContent =
                 `${thresholds.low}°C — ${thresholds.high}°C`;
-            alert(`✅ Umbrales guardados en Azure: ${thresholds.low}°C — ${thresholds.high}°C`);
+
+            // ── NUEVO: re-evaluar alerta con nuevos umbrales ──
+            const currentTemp = parseFloat(
+                document.getElementById('valCurrent').textContent
+            );
+            if (!isNaN(currentTemp)) evaluateAlerts(currentTemp);
+            // ──────────────────────────────────────────────────
+
+            alert(`✅ Umbrales guardados: ${thresholds.low}°C — ${thresholds.high}°C`);
         } else {
             alert('❌ Error al guardar en Azure');
         }
