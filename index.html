@@ -542,21 +542,35 @@ let chart      = null;
 // ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('threshHigh').value = thresholds.high;
-  document.getElementById('threshLow').value  = thresholds.low;
+document.addEventListener('DOMContentLoaded', async () => {
+    // Cargar umbrales desde Device Twin al arrancar
+    try {
+        const res  = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net.azurewebsites.net/api/getThresholds');
+        if (res.ok) {
+            const data = await res.json();
+            thresholds.high = data.alertTempHigh;
+            thresholds.low  = data.alertTempLow;
+            // Guardar en localStorage como cache
+            localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+        }
+    } catch (err) {
+        console.warn('No se pudieron cargar umbrales del twin, usando localStorage:', err.message);
+    }
 
-  // Auto-hide banner since URL is pre-configured
-  document.getElementById('configBanner').classList.add('hidden');
-  if (apiUrl) {
-    document.getElementById('configBanner').classList.add('hidden');
-    loadData();
-    setInterval(loadData, REFRESH_MS);
-  } else {
-    document.getElementById('chartLoading').innerHTML =
-      '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
-    setStatus('warn', 'Sin configurar');
-  }
+    // Actualizar inputs con valores del twin
+    document.getElementById('threshHigh').value = thresholds.high;
+    document.getElementById('threshLow').value  = thresholds.low;
+
+    // Resto del init igual que antes
+    if (apiUrl) {
+        document.getElementById('configBanner').classList.add('hidden');
+        loadData();
+        setInterval(loadData, REFRESH_MS);
+    } else {
+        document.getElementById('chartLoading').innerHTML =
+            '<span style="color:var(--color-text-secondary);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
+        setStatus('warn', 'Sin configurar');
+    }
 });
 
 function saveApiUrl() {
@@ -576,7 +590,7 @@ async function saveThresholds() {
 
     // Actualizar Device Twin en Azure
     try {
-        const res = await fetch('https://TU-FUNCTION-APP.azurewebsites.net/api/updateThresholds', {
+        const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net.azurewebsites.net/api/updateThresholds', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
