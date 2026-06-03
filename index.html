@@ -5,7 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cámara Fría — Monitor</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js">
+function setPeriod(period, btn) {
+    currentPeriod = period;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
+    document.getElementById('chartTitle').textContent =
+        'Historial de temperatura — ' + titles[period];
+    document.getElementById('chartLoading').style.display = 'flex';
+    document.getElementById('chartLoading').innerHTML =
+        '<div class="spinner"></div><span>Cargando datos...</span>';
+    document.getElementById('tempChart').style.display = 'none';
+    loadData();
+}
+</script>
 
 <style>
   :root {
@@ -403,6 +417,21 @@
     transition: background .2s;
   }
   .threshold-save:hover { background: rgba(0,200,255,.1); }
+
+  /* PERIOD BUTTONS */
+  .period-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text2);
+    border-radius: 6px;
+    padding: .25rem .6rem;
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .period-btn:hover  { border-color: var(--accent); color: var(--accent); }
+  .period-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 </style>
 </head>
 <body>
@@ -460,8 +489,15 @@
   <!-- CHART -->
   <div class="chart-card">
     <div class="chart-header">
-      <div class="chart-title">Historial de temperatura — últimas 24h</div>
-      <div class="chart-meta" id="chartMeta">— registros</div>
+      <div class="chart-title" id="chartTitle">Historial de temperatura — últimas 24h</div>
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <div class="chart-meta" id="chartMeta">— registros</div>
+        <div style="display:flex;gap:4px">
+          <button class="period-btn active" onclick="setPeriod('24h', this)">24h</button>
+          <button class="period-btn" onclick="setPeriod('7d', this)">7d</button>
+          <button class="period-btn" onclick="setPeriod('30d', this)">30d</button>
+        </div>
+      </div>
     </div>
     <div class="chart-wrap">
       <div class="loading" id="chartLoading">
@@ -538,39 +574,26 @@ const REFRESH_MS         = 60000; // refresca cada 60s
 let apiUrl = localStorage.getItem(STORAGE_KEY_URL) || 'https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getTemperatureHistory';
 let thresholds = JSON.parse(localStorage.getItem(STORAGE_KEY_THRESH) || '{"high":-10,"low":-25}');
 let chart      = null;
+let currentPeriod = '24h';
 
 // ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-    // Cargar umbrales desde Device Twin al arrancar
-    try {
-        const res  = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getThresholds');
-        if (res.ok) {
-            const data = await res.json();
-            thresholds.high = data.alertTempHigh;
-            thresholds.low  = data.alertTempLow;
-            // Guardar en localStorage como cache
-            localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-        }
-    } catch (err) {
-        console.warn('No se pudieron cargar umbrales del twin, usando localStorage:', err.message);
-    }
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('threshHigh').value = thresholds.high;
+  document.getElementById('threshLow').value  = thresholds.low;
 
-    // Actualizar inputs con valores del twin
-    document.getElementById('threshHigh').value = thresholds.high;
-    document.getElementById('threshLow').value  = thresholds.low;
-
-    // Resto del init igual que antes
-    if (apiUrl) {
-        document.getElementById('configBanner').classList.add('hidden');
-        loadData();
-        setInterval(loadData, REFRESH_MS);
-    } else {
-        document.getElementById('chartLoading').innerHTML =
-            '<span style="color:var(--color-text-secondary);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
-        setStatus('warn', 'Sin configurar');
-    }
+  // Auto-hide banner since URL is pre-configured
+  document.getElementById('configBanner').classList.add('hidden');
+  if (apiUrl) {
+    document.getElementById('configBanner').classList.add('hidden');
+    loadData();
+    setInterval(loadData, REFRESH_MS);
+  } else {
+    document.getElementById('chartLoading').innerHTML =
+      '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
+    setStatus('warn', 'Sin configurar');
+  }
 });
 
 function saveApiUrl() {
@@ -583,39 +606,13 @@ function saveApiUrl() {
   setInterval(loadData, REFRESH_MS);
 }
 
-async function saveThresholds() {
-    thresholds.high = parseFloat(document.getElementById('threshHigh').value);
-    thresholds.low  = parseFloat(document.getElementById('threshLow').value);
-    localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-
-    try {
-        const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/updateThresholds', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                alertTempHigh: thresholds.high,
-                alertTempLow:  thresholds.low
-            })
-        });
-
-        if (res.ok) {
-            document.getElementById('statRange').textContent =
-                `${thresholds.low}°C — ${thresholds.high}°C`;
-
-            // ── NUEVO: re-evaluar alerta con nuevos umbrales ──
-            const currentTemp = parseFloat(
-                document.getElementById('valCurrent').textContent
-            );
-            if (!isNaN(currentTemp)) evaluateAlerts(currentTemp);
-            // ──────────────────────────────────────────────────
-
-            alert(`✅ Umbrales guardados: ${thresholds.low}°C — ${thresholds.high}°C`);
-        } else {
-            alert('❌ Error al guardar en Azure');
-        }
-    } catch (err) {
-        alert('❌ Error de conexión: ' + err.message);
-    }
+function saveThresholds() {
+  thresholds.high = parseFloat(document.getElementById('threshHigh').value);
+  thresholds.low  = parseFloat(document.getElementById('threshLow').value);
+  localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+  document.getElementById('statRange').textContent =
+    `${thresholds.low}°C — ${thresholds.high}°C`;
+  if (chart) evaluateAlerts(chart.data.datasets[0].data.slice(-1)[0]?.y ?? null);
 }
 
 // ─────────────────────────────────────────────
@@ -623,7 +620,7 @@ async function saveThresholds() {
 // ─────────────────────────────────────────────
 async function loadData() {
   try {
-    const res  = await fetch(apiUrl);
+    const res  = await fetch(`${apiUrl}?period=${currentPeriod}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -682,8 +679,9 @@ function renderKPIs(data) {
   document.getElementById('valAvg').innerHTML     = `${fmt(avg)}<span class="kpi-unit">°C</span>`;
 
   document.getElementById('subCurrent').textContent = formatTime(latest.timestamp);
-  document.getElementById('subMin').textContent     = 'Últimas 24h';
-  document.getElementById('subMax').textContent     = 'Últimas 24h';
+  const periodLabels = { '24h': 'Últimas 24h', '7d': 'Últimos 7 días', '30d': 'Últimos 30 días' };
+  document.getElementById('subMin').textContent     = periodLabels[currentPeriod] || 'Últimas 24h';
+  document.getElementById('subMax').textContent     = periodLabels[currentPeriod] || 'Últimas 24h';
   document.getElementById('subAvg').textContent     = `${data.length} registros`;
 
   // color warnings
@@ -877,6 +875,20 @@ function formatTime(ts) {
 }
 
 
+
+function setPeriod(period, btn) {
+    currentPeriod = period;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
+    document.getElementById('chartTitle').textContent =
+        'Historial de temperatura — ' + titles[period];
+    document.getElementById('chartLoading').style.display = 'flex';
+    document.getElementById('chartLoading').innerHTML =
+        '<div class="spinner"></div><span>Cargando datos...</span>';
+    document.getElementById('tempChart').style.display = 'none';
+    loadData();
+}
 </script>
 </body>
 </html>
