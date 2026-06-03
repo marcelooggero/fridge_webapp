@@ -1,1018 +1,1366 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cámara Fría — Monitor</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js">
-function setPeriod(period, btn) {
-    currentPeriod = period;
-    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
-    document.getElementById('chartTitle').textContent =
-        'Historial de temperatura — ' + titles[period];
-    document.getElementById('chartLoading').style.display = 'flex';
-    document.getElementById('chartLoading').innerHTML =
-        '<div class="spinner"></div><span>Cargando datos...</span>';
-    document.getElementById('tempChart').style.display = 'none';
-    loadData();
-}
-</script>
-
-<style>
-  :root {
-    --bg:        #050e1a;
-    --bg2:       #091628;
-    --bg3:       #0d1f35;
-    --border:    #1a3050;
-    --accent:    #00c8ff;
-    --accent2:   #0077ff;
-    --cold:      #7ee8ff;
-    --warn:      #ff6b35;
-    --ok:        #00e5a0;
-    --text:      #e8f4ff;
-    --text2:     #6b9ab8;
-    --text3:     #3a6080;
-    --font-mono: 'DM Mono', monospace;
-    --font-disp: 'Syne', sans-serif;
-  }
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-mono);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* background grid */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--border) 1px, transparent 1px),
-      linear-gradient(90deg, var(--border) 1px, transparent 1px);
-    background-size: 40px 40px;
-    opacity: 0.25;
-    pointer-events: none;
-  }
-
-  /* top glow */
-  body::after {
-    content: '';
-    position: fixed;
-    top: -200px; left: 50%;
-    transform: translateX(-50%);
-    width: 600px; height: 400px;
-    background: radial-gradient(ellipse, rgba(0,200,255,0.08) 0%, transparent 70%);
-    pointer-events: none;
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid var(--border);
-    position: relative;
-    z-index: 1;
-  }
-
-  .logo {
-    font-family: var(--font-disp);
-    font-weight: 800;
-    font-size: 1.1rem;
-    letter-spacing: .05em;
-    color: var(--text);
-  }
-
-  .logo span { color: var(--accent); }
-
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    font-size: .7rem;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--text2);
-    border: 1px solid var(--border);
-    padding: .35rem .75rem;
-    border-radius: 999px;
-  }
-
-  .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 8px var(--ok);
-    animation: pulse 2s infinite;
-  }
-
-  .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
-
-  @keyframes pulse {
-    0%,100% { opacity: 1; }
-    50%      { opacity: .4; }
-  }
-
-  .last-update {
-    font-size: .65rem;
-    color: var(--text3);
-    letter-spacing: .08em;
-  }
-
-  main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 2rem;
-    position: relative;
-    z-index: 1;
-  }
-
-  /* CONFIG BANNER */
-  .config-banner {
-    background: rgba(255,107,53,.08);
-    border: 1px solid rgba(255,107,53,.3);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 2rem;
-    font-size: .8rem;
-    color: #ffb08a;
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-  }
-  .config-banner.hidden { display: none; }
-  .config-banner input {
-    flex: 1;
-    background: rgba(255,107,53,.1);
-    border: 1px solid rgba(255,107,53,.4);
-    border-radius: 6px;
-    padding: .4rem .75rem;
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: .8rem;
-    outline: none;
-  }
-  .config-banner button {
-    background: var(--warn);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: .4rem .9rem;
-    font-family: var(--font-mono);
-    font-size: .75rem;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  /* KPI GRID */
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .kpi {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
-    position: relative;
-    overflow: hidden;
-    transition: border-color .3s;
-  }
-
-  .kpi::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent2), var(--accent));
-    opacity: 0.6;
-  }
-
-  .kpi.alert-high::before { background: var(--warn); opacity: 1; }
-  .kpi.alert-low::before  { background: #a78bfa; opacity: 1; }
-
-  .kpi-label {
-    font-size: .65rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--text3);
-    margin-bottom: .5rem;
-  }
-
-  .kpi-value {
-    font-family: var(--font-disp);
-    font-size: 2.4rem;
-    font-weight: 800;
-    line-height: 1;
-    color: var(--cold);
-    transition: color .5s;
-  }
-
-  .kpi-value.warn  { color: var(--warn); }
-  .kpi-value.small { font-size: 1.6rem; }
-
-  .kpi-unit {
-    font-size: .75rem;
-    color: var(--text2);
-    margin-left: .2rem;
-  }
-
-  .kpi-sub {
-    font-size: .7rem;
-    color: var(--text3);
-    margin-top: .4rem;
-  }
-
-  /* ALERT BANNER */
-  .alert-bar {
-    display: none;
-    background: rgba(255,107,53,.1);
-    border: 1px solid rgba(255,107,53,.5);
-    border-radius: 8px;
-    padding: .75rem 1.25rem;
-    margin-bottom: 1.5rem;
-    font-size: .8rem;
-    color: var(--warn);
-    letter-spacing: .05em;
-    animation: flash 1s infinite;
-  }
-
-  .alert-bar.visible { display: flex; align-items: center; gap: .75rem; }
-
-  @keyframes flash {
-    0%,100% { opacity: 1; }
-    50%      { opacity: .6; }
-  }
-
-  /* CHART CARD */
-  .chart-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.25rem;
-    flex-wrap: wrap;
-    gap: .5rem;
-  }
-
-  .chart-title {
-    font-family: var(--font-disp);
-    font-weight: 600;
-    font-size: .95rem;
-    color: var(--text);
-  }
-
-  .chart-meta {
-    font-size: .65rem;
-    color: var(--text3);
-    letter-spacing: .08em;
-    text-transform: uppercase;
-  }
-
-  .chart-wrap {
-    position: relative;
-    height: 300px;
-  }
-
-  /* BOTTOM GRID */
-  .bottom-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-
-  /* ── TABLET (max 768px) ── */
-  @media (max-width: 768px) {
-    header {
-      padding: 1rem 1.25rem;
-      flex-wrap: wrap;
-      gap: .5rem;
-    }
-    .logo { font-size: 1rem; }
-    .last-update { display: none; }
-    main { padding: 1rem; }
-    .kpi-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: .75rem;
-    }
-    .kpi { padding: 1rem 1.1rem; }
-    .kpi-value { font-size: 2rem; }
-    .kpi-value.small { font-size: 1.4rem; }
-    .chart-wrap { height: 320px; }
-    .chart-header { flex-direction: column; align-items: flex-start; gap: .75rem; }
-    .chart-header > div:last-child { width: 100%; justify-content: space-between; }
-    .period-btn { padding: .4rem .9rem; font-size: .75rem; flex: 1; text-align: center; }
-    .bottom-grid { grid-template-columns: 1fr; }
-  }
-
-  /* ── MOBILE (max 480px) ── */
-  @media (max-width: 480px) {
-    header { padding: .75rem 1rem; }
-    .logo { font-size: .95rem; }
-    .status-pill { font-size: .6rem; padding: .3rem .6rem; }
-    main { padding: .75rem; }
-    .kpi-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: .5rem;
-      margin-bottom: 1rem;
-    }
-    .kpi { padding: .85rem 1rem; border-radius: 10px; }
-    .kpi-label { font-size: .6rem; margin-bottom: .3rem; }
-    .kpi-value { font-size: 1.75rem; }
-    .kpi-value.small { font-size: 1.3rem; }
-    .kpi-sub { font-size: .6rem; }
-    .chart-card { padding: 1rem; border-radius: 10px; }
-    .chart-wrap { height: 280px; }
-    .chart-title { font-size: .85rem; }
-    .chart-meta { font-size: .6rem; }
-    .period-btn { padding: .45rem .5rem; font-size: .7rem; }
-    .info-card { padding: 1rem; border-radius: 10px; }
-    .info-card-title { font-size: .6rem; }
-    .stats-table td { font-size: .72rem; padding: .45rem 0; }
-    .threshold-row label { font-size: .7rem; min-width: 70px; }
-    .threshold-row input { width: 65px; font-size: .75rem; }
-    .threshold-save { font-size: .7rem; padding: .4rem .8rem; }
-    .rssi-label { font-size: .7rem; min-width: 50px; }
-    .rssi-val { font-size: .7rem; }
-    .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
-  }
-
-  .info-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
-  }
-
-  .info-card-title {
-    font-size: .65rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--text3);
-    margin-bottom: 1rem;
-  }
-
-  /* RSSI bar */
-  .rssi-wrap { display: flex; flex-direction: column; gap: .5rem; }
-
-  .rssi-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-  }
-
-  .rssi-label { font-size: .75rem; color: var(--text2); min-width: 60px; }
-
-  .rssi-bar-bg {
-    flex: 1;
-    height: 6px;
-    background: var(--bg3);
-    border-radius: 99px;
-    overflow: hidden;
-  }
-
-  .rssi-bar-fill {
-    height: 100%;
-    border-radius: 99px;
-    background: linear-gradient(90deg, var(--accent2), var(--accent));
-    transition: width .8s ease;
-  }
-
-  .rssi-val { font-size: .75rem; color: var(--text2); min-width: 50px; text-align: right; }
-
-  /* STATS TABLE */
-  .stats-table { width: 100%; border-collapse: collapse; }
-  .stats-table tr { border-bottom: 1px solid var(--border); }
-  .stats-table tr:last-child { border-bottom: none; }
-  .stats-table td { padding: .55rem 0; font-size: .8rem; }
-  .stats-table td:first-child { color: var(--text3); }
-  .stats-table td:last-child  { color: var(--text); text-align: right; font-weight: 500; }
-
-  /* LOADING */
-  .loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 260px;
-    color: var(--text3);
-    font-size: .8rem;
-    letter-spacing: .1em;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .spinner {
-    width: 30px; height: 30px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin .8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .error-msg {
-    color: var(--warn);
-    font-size: .8rem;
-    text-align: center;
-    padding: 2rem;
-  }
-
-  /* THRESHOLDS */
-  .threshold-row {
-    display: flex;
-    gap: .5rem;
-    align-items: center;
-    margin-bottom: .5rem;
-  }
-  .threshold-row label { font-size: .75rem; color: var(--text3); min-width: 80px; }
-  .threshold-row input {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: .3rem .6rem;
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: .8rem;
-    width: 80px;
-    outline: none;
-  }
-  .threshold-row input:focus { border-color: var(--accent); }
-  .threshold-save {
-    margin-top: .75rem;
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    border-radius: 6px;
-    padding: .35rem .9rem;
-    font-family: var(--font-mono);
-    font-size: .75rem;
-    cursor: pointer;
-    transition: background .2s;
-  }
-  .threshold-save:hover { background: rgba(0,200,255,.1); }
-
-  /* PERIOD BUTTONS */
-  .period-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text2);
-    border-radius: 6px;
-    padding: .25rem .6rem;
-    font-family: var(--font-mono);
-    font-size: .7rem;
-    cursor: pointer;
-    transition: all .2s;
-  }
-  .period-btn:hover  { border-color: var(--accent); color: var(--accent); }
-  .period-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-</style>
-</head>
-<body>
-
-<header>
-  <div class="logo">CÁMARA<span>FRÍA</span></div>
-  <div style="display:flex;align-items:center;gap:1rem">
-    <span class="last-update" id="lastUpdate">—</span>
-    <div class="status-pill">
-      <div class="dot" id="statusDot"></div>
-      <span id="statusText">Conectando...</span>
-    </div>
-  </div>
-</header>
-
-<main>
-<div id="debug-panel" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#00ff88;font-family:monospace;font-size:11px;padding:8px;max-height:120px;overflow-y:auto;z-index:9999">Debug log...</div>
-
-  <!-- CONFIG BANNER -->
-  <div class="config-banner" id="configBanner">
-    <span>⚙ Pegá la URL de tu Azure Function:</span>
-    <input type="text" id="apiUrlInput" placeholder="https://TU-FUNCTION-APP.azurewebsites.net/api/getTemperatureHistory" />
-    <button onclick="saveApiUrl()">Guardar</button>
-  </div>
-
-  <!-- ALERT BAR -->
-  <div class="alert-bar" id="alertBar">
-    <span>⚠</span>
-    <span id="alertMsg">Temperatura fuera de rango</span>
-  </div>
-
-  <!-- KPIs -->
-  <div class="kpi-grid">
-    <div class="kpi" id="kpiCurrent">
-      <div class="kpi-label">Temperatura actual</div>
-      <div class="kpi-value" id="valCurrent">—<span class="kpi-unit">°C</span></div>
-      <div class="kpi-sub" id="subCurrent">Último dato recibido</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Mínima del día</div>
-      <div class="kpi-value small" id="valMin">—<span class="kpi-unit">°C</span></div>
-      <div class="kpi-sub" id="subMin">—</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Máxima del día</div>
-      <div class="kpi-value small" id="valMax">—<span class="kpi-unit">°C</span></div>
-      <div class="kpi-sub" id="subMax">—</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Promedio 24h</div>
-      <div class="kpi-value small" id="valAvg">—<span class="kpi-unit">°C</span></div>
-      <div class="kpi-sub" id="subAvg">—</div>
-    </div>
-  </div>
-
-  <!-- CHART -->
-  <div class="chart-card">
-    <div class="chart-header">
-      <div class="chart-title" id="chartTitle">Historial de temperatura — últimas 24h</div>
-      <div style="display:flex;align-items:center;gap:.75rem">
-        <div class="chart-meta" id="chartMeta">— registros</div>
-        <div style="display:flex;gap:6px">
-          <button class="period-btn active" onclick="setPeriod('24h', this)">24h</button>
-          <button class="period-btn" onclick="setPeriod('7d', this)">7d</button>
-          <button class="period-btn" onclick="setPeriod('30d', this)">30d</button>
-        </div>
-      </div>
-    </div>
-    <div class="chart-wrap">
-      <div class="loading" id="chartLoading">
-        <div class="spinner"></div>
-        <span>Cargando datos...</span>
-      </div>
-      <canvas id="tempChart" style="display:none"></canvas>
-    </div>
-  </div>
-
-  <!-- BOTTOM GRID -->
-  <div class="bottom-grid">
-
-    <!-- RSSI -->
-    <div class="info-card">
-      <div class="info-card-title">Señal WiFi (RSSI)</div>
-      <div class="rssi-wrap" id="rssiWrap">
-        <div class="rssi-row">
-          <span class="rssi-label">Actual</span>
-          <div class="rssi-bar-bg"><div class="rssi-bar-fill" id="rssiBarCurrent" style="width:0%"></div></div>
-          <span class="rssi-val" id="rssiValCurrent">—</span>
-        </div>
-        <div class="rssi-row">
-          <span class="rssi-label">Promedio</span>
-          <div class="rssi-bar-bg"><div class="rssi-bar-fill" id="rssiBarAvg" style="width:0%"></div></div>
-          <span class="rssi-val" id="rssiValAvg">—</span>
-        </div>
-        <div class="rssi-row">
-          <span class="rssi-label">Mínimo</span>
-          <div class="rssi-bar-bg"><div class="rssi-bar-fill" id="rssiBarMin" style="width:0%;background:linear-gradient(90deg,#ff6b35,#ffa07a)"></div></div>
-          <span class="rssi-val" id="rssiValMin">—</span>
-        </div>
-      </div>
-      <div style="margin-top:1rem;font-size:.65rem;color:var(--text3)">
-        -30 dBm = excelente &nbsp;|&nbsp; -70 dBm = débil &nbsp;|&nbsp; -90 dBm = crítico
-      </div>
-    </div>
-
-    <!-- STATS + THRESHOLDS -->
-    <div class="info-card">
-      <div class="info-card-title">Estadísticas y alertas</div>
-      <table class="stats-table">
-        <tr><td>Total registros 24h</td><td id="statCount">—</td></tr>
-        <tr><td>Último mensaje</td><td id="statLast">—</td></tr>
-        <tr><td>Rango normal</td><td id="statRange">—</td></tr>
-        <tr><td>Tiempo fuera de rango</td><td id="statOut">—</td></tr>
-      </table>
-      <div style="margin-top:1rem">
-        <div class="threshold-row">
-          <label>Máx alerta</label>
-          <input type="number" id="threshHigh" value="-10" step="0.5">
-          <span style="font-size:.7rem;color:var(--text3)">°C</span>
-        </div>
-        <div class="threshold-row">
-          <label>Mín alerta</label>
-          <input type="number" id="threshLow" value="-25" step="0.5">
-          <span style="font-size:.7rem;color:var(--text3)">°C</span>
-        </div>
-        <button class="threshold-save" onclick="saveThresholds()">Guardar umbrales</button>
-      </div>
-    </div>
-
-  </div>
-</main>
-
-<script>
-// ─────────────────────────────────────────────
-// DEBUG
-// ─────────────────────────────────────────────
-function dbg(msg) {
-    const p = document.getElementById('debug-panel');
-    if (p) p.innerHTML += '<br>' + new Date().toLocaleTimeString() + ' ' + msg;
-    console.log(msg);
-}
-
-// ─────────────────────────────────────────────
-// CONFIG
-// ─────────────────────────────────────────────
-const STORAGE_KEY_URL    = 'fridgeApiUrl';
-const STORAGE_KEY_THRESH = 'fridgeThresholds';
-const REFRESH_MS         = 60000; // refresca cada 60s
-
-let apiUrl = localStorage.getItem(STORAGE_KEY_URL) || 'https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getTemperatureHistory';
-let thresholds = JSON.parse(localStorage.getItem(STORAGE_KEY_THRESH) || '{"high":-10,"low":-25}');
-let chart      = null;
-let currentPeriod = '24h';
-
-// ─────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-    // Cargar umbrales desde Device Twin al arrancar
-    try {
-        dbg('Fetching thresholds from twin...');
-        const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getThresholds');
-        dbg('getThresholds status: ' + res.status);
-        if (res.ok) {
-            const data = await res.json();
-            dbg('Twin data: ' + JSON.stringify(data));
-            thresholds.high = data.alertTempHigh;
-            thresholds.low  = data.alertTempLow;
-            localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-            dbg('Thresholds applied: high=' + thresholds.high + ' low=' + thresholds.low);
-        } else {
-            dbg('ERROR getThresholds: HTTP ' + res.status);
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cámara Fría — Monitor</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"
+    >
+      function setPeriod(period, btn) {
+          currentPeriod = period;
+          document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
+          document.getElementById('chartTitle').textContent =
+              'Historial de temperatura — ' + titles[period];
+          document.getElementById('chartLoading').style.display = 'flex';
+          document.getElementById('chartLoading').innerHTML =
+              '<div class="spinner"></div><span>Cargando datos...</span>';
+          document.getElementById('tempChart').style.display = 'none';
+          loadData();
+      }
+    </script>
+
+    <style>
+      :root {
+        --bg: #050e1a;
+        --bg2: #091628;
+        --bg3: #0d1f35;
+        --border: #1a3050;
+        --accent: #00c8ff;
+        --accent2: #0077ff;
+        --cold: #7ee8ff;
+        --warn: #ff6b35;
+        --ok: #00e5a0;
+        --text: #e8f4ff;
+        --text2: #6b9ab8;
+        --text3: #3a6080;
+        --font-mono: "DM Mono", monospace;
+        --font-disp: "Syne", sans-serif;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-mono);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      /* background grid */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(var(--border) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border) 1px, transparent 1px);
+        background-size: 40px 40px;
+        opacity: 0.25;
+        pointer-events: none;
+      }
+
+      /* top glow */
+      body::after {
+        content: "";
+        position: fixed;
+        top: -200px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        height: 400px;
+        background: radial-gradient(
+          ellipse,
+          rgba(0, 200, 255, 0.08) 0%,
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid var(--border);
+        position: relative;
+        z-index: 1;
+      }
+
+      .logo {
+        font-family: var(--font-disp);
+        font-weight: 800;
+        font-size: 1.1rem;
+        letter-spacing: 0.05em;
+        color: var(--text);
+      }
+
+      .logo span {
+        color: var(--accent);
+      }
+
+      .status-pill {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text2);
+        border: 1px solid var(--border);
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--ok);
+        box-shadow: 0 0 8px var(--ok);
+        animation: pulse 2s infinite;
+      }
+
+      .dot.warn {
+        background: var(--warn);
+        box-shadow: 0 0 8px var(--warn);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
         }
-    } catch (err) {
-        dbg('FETCH ERROR: ' + err.message);
-    }
-    dbg('localStorage: ' + localStorage.getItem(STORAGE_KEY_THRESH));
+        50% {
+          opacity: 0.4;
+        }
+      }
 
-    // Actualizar inputs con valores del twin
-    document.getElementById('threshHigh').value = thresholds.high;
-    document.getElementById('threshLow').value  = thresholds.low;
-    dbg('Inputs set: high=' + document.getElementById('threshHigh').value + ' low=' + document.getElementById('threshLow').value);
+      .last-update {
+        font-size: 0.65rem;
+        color: var(--text3);
+        letter-spacing: 0.08em;
+      }
 
-    // Arrancar dashboard
-    document.getElementById('configBanner').classList.add('hidden');
-    if (apiUrl) {
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 2rem;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* CONFIG BANNER */
+      .config-banner {
+        background: rgba(255, 107, 53, 0.08);
+        border: 1px solid rgba(255, 107, 53, 0.3);
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 2rem;
+        font-size: 0.8rem;
+        color: #ffb08a;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .config-banner.hidden {
+        display: none;
+      }
+      .config-banner input {
+        flex: 1;
+        background: rgba(255, 107, 53, 0.1);
+        border: 1px solid rgba(255, 107, 53, 0.4);
+        border-radius: 6px;
+        padding: 0.4rem 0.75rem;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        outline: none;
+      }
+      .config-banner button {
+        background: var(--warn);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 0.4rem 0.9rem;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      /* KPI GRID */
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .kpi {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.3s;
+      }
+
+      .kpi::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--accent2), var(--accent));
+        opacity: 0.6;
+      }
+
+      .kpi.alert-high::before {
+        background: var(--warn);
+        opacity: 1;
+      }
+      .kpi.alert-low::before {
+        background: #a78bfa;
+        opacity: 1;
+      }
+
+      .kpi-label {
+        font-size: 0.65rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text3);
+        margin-bottom: 0.5rem;
+      }
+
+      .kpi-value {
+        font-family: var(--font-disp);
+        font-size: 2.4rem;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--cold);
+        transition: color 0.5s;
+      }
+
+      .kpi-value.warn {
+        color: var(--warn);
+      }
+      .kpi-value.small {
+        font-size: 1.6rem;
+      }
+
+      .kpi-unit {
+        font-size: 0.75rem;
+        color: var(--text2);
+        margin-left: 0.2rem;
+      }
+
+      .kpi-sub {
+        font-size: 0.7rem;
+        color: var(--text3);
+        margin-top: 0.4rem;
+      }
+
+      /* ALERT BANNER */
+      .alert-bar {
+        display: none;
+        background: rgba(255, 107, 53, 0.1);
+        border: 1px solid rgba(255, 107, 53, 0.5);
+        border-radius: 8px;
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.8rem;
+        color: var(--warn);
+        letter-spacing: 0.05em;
+        animation: flash 1s infinite;
+      }
+
+      .alert-bar.visible {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      @keyframes flash {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+
+      /* CHART CARD */
+      .chart-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.25rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .chart-title {
+        font-family: var(--font-disp);
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--text);
+      }
+
+      .chart-meta {
+        font-size: 0.65rem;
+        color: var(--text3);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .chart-wrap {
+        position: relative;
+        height: 300px;
+      }
+
+      /* BOTTOM GRID */
+      .bottom-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+
+      /* ── TABLET (max 768px) ── */
+      @media (max-width: 768px) {
+        header {
+          padding: 1rem 1.25rem;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+        .logo {
+          font-size: 1rem;
+        }
+        .last-update {
+          display: none;
+        }
+        main {
+          padding: 1rem;
+        }
+        .kpi-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 0.75rem;
+        }
+        .kpi {
+          padding: 1rem 1.1rem;
+        }
+        .kpi-value {
+          font-size: 2rem;
+        }
+        .kpi-value.small {
+          font-size: 1.4rem;
+        }
+        .chart-wrap {
+          height: 320px;
+        }
+        .chart-header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.75rem;
+        }
+        .chart-header > div:last-child {
+          width: 100%;
+          justify-content: space-between;
+        }
+        .period-btn {
+          padding: 0.4rem 0.9rem;
+          font-size: 0.75rem;
+          flex: 1;
+          text-align: center;
+        }
+        .bottom-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ── MOBILE (max 480px) ── */
+      @media (max-width: 480px) {
+        header {
+          padding: 0.75rem 1rem;
+        }
+        .logo {
+          font-size: 0.95rem;
+        }
+        .status-pill {
+          font-size: 0.6rem;
+          padding: 0.3rem 0.6rem;
+        }
+        main {
+          padding: 0.75rem;
+        }
+        .kpi-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+        .kpi {
+          padding: 0.85rem 1rem;
+          border-radius: 10px;
+        }
+        .kpi-label {
+          font-size: 0.6rem;
+          margin-bottom: 0.3rem;
+        }
+        .kpi-value {
+          font-size: 1.75rem;
+        }
+        .kpi-value.small {
+          font-size: 1.3rem;
+        }
+        .kpi-sub {
+          font-size: 0.6rem;
+        }
+        .chart-card {
+          padding: 1rem;
+          border-radius: 10px;
+        }
+        .chart-wrap {
+          height: 280px;
+        }
+        .chart-title {
+          font-size: 0.85rem;
+        }
+        .chart-meta {
+          font-size: 0.6rem;
+        }
+        .period-btn {
+          padding: 0.45rem 0.5rem;
+          font-size: 0.7rem;
+        }
+        .info-card {
+          padding: 1rem;
+          border-radius: 10px;
+        }
+        .info-card-title {
+          font-size: 0.6rem;
+        }
+        .stats-table td {
+          font-size: 0.72rem;
+          padding: 0.45rem 0;
+        }
+        .threshold-row label {
+          font-size: 0.7rem;
+          min-width: 70px;
+        }
+        .threshold-row input {
+          width: 65px;
+          font-size: 0.75rem;
+        }
+        .threshold-save {
+          font-size: 0.7rem;
+          padding: 0.4rem 0.8rem;
+        }
+        .rssi-label {
+          font-size: 0.7rem;
+          min-width: 50px;
+        }
+        .rssi-val {
+          font-size: 0.7rem;
+        }
+        .alert-bar {
+          font-size: 0.75rem;
+          padding: 0.6rem 1rem;
+          border-radius: 6px;
+        }
+      }
+
+      .info-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+      }
+
+      .info-card-title {
+        font-size: 0.65rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text3);
+        margin-bottom: 1rem;
+      }
+
+      /* RSSI bar */
+      .rssi-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .rssi-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+
+      .rssi-label {
+        font-size: 0.75rem;
+        color: var(--text2);
+        min-width: 60px;
+      }
+
+      .rssi-bar-bg {
+        flex: 1;
+        height: 6px;
+        background: var(--bg3);
+        border-radius: 99px;
+        overflow: hidden;
+      }
+
+      .rssi-bar-fill {
+        height: 100%;
+        border-radius: 99px;
+        background: linear-gradient(90deg, var(--accent2), var(--accent));
+        transition: width 0.8s ease;
+      }
+
+      .rssi-val {
+        font-size: 0.75rem;
+        color: var(--text2);
+        min-width: 50px;
+        text-align: right;
+      }
+
+      /* STATS TABLE */
+      .stats-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .stats-table tr {
+        border-bottom: 1px solid var(--border);
+      }
+      .stats-table tr:last-child {
+        border-bottom: none;
+      }
+      .stats-table td {
+        padding: 0.55rem 0;
+        font-size: 0.8rem;
+      }
+      .stats-table td:first-child {
+        color: var(--text3);
+      }
+      .stats-table td:last-child {
+        color: var(--text);
+        text-align: right;
+        font-weight: 500;
+      }
+
+      /* LOADING */
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 260px;
+        color: var(--text3);
+        font-size: 0.8rem;
+        letter-spacing: 0.1em;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .spinner {
+        width: 30px;
+        height: 30px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error-msg {
+        color: var(--warn);
+        font-size: 0.8rem;
+        text-align: center;
+        padding: 2rem;
+      }
+
+      /* THRESHOLDS */
+      .threshold-row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.5rem;
+      }
+      .threshold-row label {
+        font-size: 0.75rem;
+        color: var(--text3);
+        min-width: 80px;
+      }
+      .threshold-row input {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.3rem 0.6rem;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        width: 80px;
+        outline: none;
+      }
+      .threshold-row input:focus {
+        border-color: var(--accent);
+      }
+      .threshold-save {
+        margin-top: 0.75rem;
+        background: transparent;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        border-radius: 6px;
+        padding: 0.35rem 0.9rem;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .threshold-save:hover {
+        background: rgba(0, 200, 255, 0.1);
+      }
+
+      /* PERIOD BUTTONS */
+      .period-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text2);
+        border-radius: 6px;
+        padding: 0.25rem 0.6rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .period-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .period-btn.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--bg);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">CÁMARA<span>FRÍA</span></div>
+      <div style="display: flex; align-items: center; gap: 1rem">
+        <span class="last-update" id="lastUpdate">—</span>
+        <div class="status-pill">
+          <div class="dot" id="statusDot"></div>
+          <span id="statusText">Conectando...</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div
+        id="debug-panel"
+        style="
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: rgba(0, 0, 0, 0.85);
+          color: #00ff88;
+          font-family: monospace;
+          font-size: 11px;
+          padding: 8px;
+          max-height: 120px;
+          overflow-y: auto;
+          z-index: 9999;
+        "
+      >
+        Debug log...
+      </div>
+
+      <!-- CONFIG BANNER -->
+      <div class="config-banner" id="configBanner">
+        <span>⚙ Pegá la URL de tu Azure Function:</span>
+        <input
+          type="text"
+          id="apiUrlInput"
+          placeholder="https://TU-FUNCTION-APP.azurewebsites.net/api/getTemperatureHistory"
+        />
+        <button onclick="saveApiUrl()">Guardar</button>
+      </div>
+
+      <!-- ALERT BAR -->
+      <div class="alert-bar" id="alertBar">
+        <span>⚠</span>
+        <span id="alertMsg">Temperatura fuera de rango</span>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi" id="kpiCurrent">
+          <div class="kpi-label">Temperatura actual</div>
+          <div class="kpi-value" id="valCurrent">
+            —<span class="kpi-unit">°C</span>
+          </div>
+          <div class="kpi-sub" id="subCurrent">Último dato recibido</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Mínima del día</div>
+          <div class="kpi-value small" id="valMin">
+            —<span class="kpi-unit">°C</span>
+          </div>
+          <div class="kpi-sub" id="subMin">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Máxima del día</div>
+          <div class="kpi-value small" id="valMax">
+            —<span class="kpi-unit">°C</span>
+          </div>
+          <div class="kpi-sub" id="subMax">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Promedio 24h</div>
+          <div class="kpi-value small" id="valAvg">
+            —<span class="kpi-unit">°C</span>
+          </div>
+          <div class="kpi-sub" id="subAvg">—</div>
+        </div>
+      </div>
+
+      <!-- CHART -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title" id="chartTitle">
+            Historial de temperatura — últimas 24h
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem">
+            <div class="chart-meta" id="chartMeta">— registros</div>
+            <div style="display: flex; gap: 6px">
+              <button
+                class="period-btn active"
+                onclick="setPeriod('24h', this)"
+              >
+                24h
+              </button>
+              <button class="period-btn" onclick="setPeriod('7d', this)">
+                7d
+              </button>
+              <button class="period-btn" onclick="setPeriod('30d', this)">
+                30d
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <div class="loading" id="chartLoading">
+            <div class="spinner"></div>
+            <span>Cargando datos...</span>
+          </div>
+          <canvas id="tempChart" style="display: none"></canvas>
+        </div>
+      </div>
+
+      <!-- BOTTOM GRID -->
+      <div class="bottom-grid">
+        <!-- RSSI -->
+        <div class="info-card">
+          <div class="info-card-title">Señal WiFi (RSSI)</div>
+          <div class="rssi-wrap" id="rssiWrap">
+            <div class="rssi-row">
+              <span class="rssi-label">Actual</span>
+              <div class="rssi-bar-bg">
+                <div
+                  class="rssi-bar-fill"
+                  id="rssiBarCurrent"
+                  style="width: 0%"
+                ></div>
+              </div>
+              <span class="rssi-val" id="rssiValCurrent">—</span>
+            </div>
+            <div class="rssi-row">
+              <span class="rssi-label">Promedio</span>
+              <div class="rssi-bar-bg">
+                <div
+                  class="rssi-bar-fill"
+                  id="rssiBarAvg"
+                  style="width: 0%"
+                ></div>
+              </div>
+              <span class="rssi-val" id="rssiValAvg">—</span>
+            </div>
+            <div class="rssi-row">
+              <span class="rssi-label">Mínimo</span>
+              <div class="rssi-bar-bg">
+                <div
+                  class="rssi-bar-fill"
+                  id="rssiBarMin"
+                  style="
+                    width: 0%;
+                    background: linear-gradient(90deg, #ff6b35, #ffa07a);
+                  "
+                ></div>
+              </div>
+              <span class="rssi-val" id="rssiValMin">—</span>
+            </div>
+          </div>
+          <div
+            style="margin-top: 1rem; font-size: 0.65rem; color: var(--text3)"
+          >
+            -30 dBm = excelente &nbsp;|&nbsp; -70 dBm = débil &nbsp;|&nbsp; -90
+            dBm = crítico
+          </div>
+        </div>
+
+        <!-- STATS + THRESHOLDS -->
+        <div class="info-card">
+          <div class="info-card-title">Estadísticas y alertas</div>
+          <table class="stats-table">
+            <tr>
+              <td>Total registros 24h</td>
+              <td id="statCount">—</td>
+            </tr>
+            <tr>
+              <td>Último mensaje</td>
+              <td id="statLast">—</td>
+            </tr>
+            <tr>
+              <td>Rango normal</td>
+              <td id="statRange">—</td>
+            </tr>
+            <tr>
+              <td>Tiempo fuera de rango</td>
+              <td id="statOut">—</td>
+            </tr>
+          </table>
+          <div style="margin-top: 1rem">
+            <div class="threshold-row">
+              <label>Máx alerta</label>
+              <input type="number" id="threshHigh" value="-10" step="0.5" />
+              <span style="font-size: 0.7rem; color: var(--text3)">°C</span>
+            </div>
+            <div class="threshold-row">
+              <label>Mín alerta</label>
+              <input type="number" id="threshLow" value="-25" step="0.5" />
+              <span style="font-size: 0.7rem; color: var(--text3)">°C</span>
+            </div>
+            <button class="threshold-save" onclick="saveThresholds()">
+              Guardar umbrales
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // ─────────────────────────────────────────────
+      // DEBUG
+      // ─────────────────────────────────────────────
+      function dbg(msg) {
+        const p = document.getElementById("debug-panel");
+        if (p)
+          p.innerHTML += "<br>" + new Date().toLocaleTimeString() + " " + msg;
+        console.log(msg);
+      }
+
+      // ─────────────────────────────────────────────
+      // CONFIG
+      // ─────────────────────────────────────────────
+      const STORAGE_KEY_URL = "fridgeApiUrl";
+      const STORAGE_KEY_THRESH = "fridgeThresholds";
+      const REFRESH_MS = 60000; // refresca cada 60s
+
+      let apiUrl =
+        localStorage.getItem(STORAGE_KEY_URL) ||
+        "https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getTemperatureHistory";
+      let thresholds = JSON.parse(
+        localStorage.getItem(STORAGE_KEY_THRESH) || '{"high":-10,"low":-25}',
+      );
+      let chart = null;
+      let currentPeriod = "24h";
+
+      // ─────────────────────────────────────────────
+      // INIT
+      // ─────────────────────────────────────────────
+      document.addEventListener("DOMContentLoaded", async () => {
+        // Cargar umbrales desde Device Twin al arrancar
+        try {
+          dbg("Fetching thresholds from twin...");
+          const res = await fetch(
+            "https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getThresholds",
+          );
+          dbg("getThresholds status: " + res.status);
+          if (res.ok) {
+            const data = await res.json();
+            dbg("Twin data: " + JSON.stringify(data));
+            thresholds.high = data.alertTempHigh;
+            thresholds.low = data.alertTempLow;
+            localStorage.setItem(
+              STORAGE_KEY_THRESH,
+              JSON.stringify(thresholds),
+            );
+            dbg(
+              "Thresholds applied: high=" +
+                thresholds.high +
+                " low=" +
+                thresholds.low,
+            );
+          } else {
+            dbg("ERROR getThresholds: HTTP " + res.status);
+          }
+        } catch (err) {
+          dbg("FETCH ERROR: " + err.message);
+        }
+        dbg("localStorage: " + localStorage.getItem(STORAGE_KEY_THRESH));
+
+        // Actualizar inputs con valores del twin
+        document.getElementById("threshHigh").value = thresholds.high;
+        document.getElementById("threshLow").value = thresholds.low;
+        dbg(
+          "Inputs set: high=" +
+            document.getElementById("threshHigh").value +
+            " low=" +
+            document.getElementById("threshLow").value,
+        );
+
+        // Arrancar dashboard
+        document.getElementById("configBanner").classList.add("hidden");
+        if (apiUrl) {
+          loadData();
+          setInterval(loadData, REFRESH_MS);
+        } else {
+          document.getElementById("chartLoading").innerHTML =
+            '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
+          setStatus("warn", "Sin configurar");
+        }
+        // Verificar valores finales después de todo
+        setTimeout(() => {
+          dbg(
+            "FINAL inputs: high=" +
+              document.getElementById("threshHigh").value +
+              " low=" +
+              document.getElementById("threshLow").value,
+          );
+          dbg("FINAL thresholds obj: " + JSON.stringify(thresholds));
+        }, 500);
+      });
+
+      function saveApiUrl() {
+        const val = document.getElementById("apiUrlInput").value.trim();
+        if (!val) return;
+        apiUrl = val;
+        localStorage.setItem(STORAGE_KEY_URL, apiUrl);
+        document.getElementById("configBanner").classList.add("hidden");
         loadData();
         setInterval(loadData, REFRESH_MS);
-    } else {
-        document.getElementById('chartLoading').innerHTML =
-            '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
-        setStatus('warn', 'Sin configurar');
-    }
-});
-
-function saveApiUrl() {
-  const val = document.getElementById('apiUrlInput').value.trim();
-  if (!val) return;
-  apiUrl = val;
-  localStorage.setItem(STORAGE_KEY_URL, apiUrl);
-  document.getElementById('configBanner').classList.add('hidden');
-  loadData();
-  setInterval(loadData, REFRESH_MS);
-}
-
-function saveThresholds() {
-  thresholds.high = parseFloat(document.getElementById('threshHigh').value);
-  thresholds.low  = parseFloat(document.getElementById('threshLow').value);
-  localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-  document.getElementById('statRange').textContent =
-    `${thresholds.low}°C — ${thresholds.high}°C`;
-  if (chart) evaluateAlerts(chart.data.datasets[0].data.slice(-1)[0]?.y ?? null);
-}
-
-// ─────────────────────────────────────────────
-// DATA
-// ─────────────────────────────────────────────
-async function loadData() {
-  try {
-    const res = await fetch(`${apiUrl}?period=${currentPeriod}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    if (!Array.isArray(data) || data.length === 0) {
-      showError('Sin datos en el período seleccionado.');
-      setStatus('warn', 'Sin datos');
-      return;
-    }
-
-    // Ordenar por timestamp ascendente
-    data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    // Deduplicar por minuto
-    const deduped = [];
-    let lastMinute = null;
-    for (const d of data) {
-      const minute = new Date(d.timestamp).toISOString().slice(0, 16);
-      if (minute !== lastMinute) {
-        deduped.push(d);
-        lastMinute = minute;
       }
-    }
 
-    // Rellenar gaps para eje temporal completo
-    const finalData = fillGaps(deduped, currentPeriod);
+      function saveThresholds() {
+        thresholds.high = parseFloat(
+          document.getElementById("threshHigh").value,
+        );
+        thresholds.low = parseFloat(document.getElementById("threshLow").value);
+        localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+        document.getElementById("statRange").textContent =
+          `${thresholds.low}°C — ${thresholds.high}°C`;
+        if (chart)
+          evaluateAlerts(chart.data.datasets[0].data.slice(-1)[0]?.y ?? null);
+      }
 
-    renderKPIs(deduped);        // KPIs usan solo datos reales
-    renderChart(finalData);     // Chart usa datos con gaps rellenos
-    renderRSSI(deduped);
-    renderStats(deduped);
-    setStatus('ok', 'En línea');
-    document.getElementById('lastUpdate').textContent =
-      'Actualizado ' + new Date().toLocaleTimeString('es-AR');
+      // ─────────────────────────────────────────────
+      // DATA
+      // ─────────────────────────────────────────────
+      async function loadData() {
+        try {
+          const res = await fetch(`${apiUrl}?period=${currentPeriod}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
 
-  } catch (err) {
-    console.error(err);
-    showError(`Error al cargar datos: ${err.message}`);
-    setStatus('warn', 'Error de conexión');
-  }
-}
-
-function fillGaps(data, period) {
-    const now    = new Date();
-    const msBack = { '24h': 24*60*60*1000, '7d': 7*24*60*60*1000, '30d': 30*24*60*60*1000 };
-    const start  = new Date(now.getTime() - (msBack[period] || msBack['24h']));
-
-    // Intervalo entre puntos según período
-    const intervalMin = period === '24h' ? 5 : period === '7d' ? 60 : 360;
-    const intervalMs  = intervalMin * 60 * 1000;
-
-    // Mapa de datos reales por slot de tiempo
-    const dataMap = new Map();
-    for (const d of data) {
-        const slot = Math.round(new Date(d.timestamp).getTime() / intervalMs) * intervalMs;
-        if (!dataMap.has(slot)) dataMap.set(slot, d);
-    }
-
-    // Generar todos los slots del período
-    const result = [];
-    let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
-    while (cursor <= now.getTime()) {
-        const existing = dataMap.get(cursor);
-        if (existing) {
-            result.push(existing);
-        } else {
-            result.push({
-                timestamp:   new Date(cursor).toISOString(),
-                temperature: null,
-                minTemp:     null,
-                maxTemp:     null,
-                rssi:        null
-            });
-        }
-        cursor += intervalMs;
-    }
-    return result;
-}
-
-// ─────────────────────────────────────────────
-// KPIs
-// ─────────────────────────────────────────────
-function renderKPIs(data) {
-  const temps  = data.map(d => d.temperature);
-  const latest = data[data.length - 1];
-  const cur    = latest.temperature;
-  const min    = Math.min(...temps);
-  const max    = Math.max(...temps);
-  const avg    = temps.reduce((a,b) => a+b, 0) / temps.length;
-
-  const fmt = v => v.toFixed(1);
-
-  document.getElementById('valCurrent').innerHTML = `${fmt(cur)}<span class="kpi-unit">°C</span>`;
-  document.getElementById('valMin').innerHTML     = `${fmt(min)}<span class="kpi-unit">°C</span>`;
-  document.getElementById('valMax').innerHTML     = `${fmt(max)}<span class="kpi-unit">°C</span>`;
-  document.getElementById('valAvg').innerHTML     = `${fmt(avg)}<span class="kpi-unit">°C</span>`;
-
-  document.getElementById('subCurrent').textContent = formatTime(latest.timestamp);
-  const periodLabels = { '24h': 'Últimas 24h', '7d': 'Últimos 7 días', '30d': 'Últimos 30 días' };
-  document.getElementById('subMin').textContent     = periodLabels[currentPeriod] || 'Últimas 24h';
-  document.getElementById('subMax').textContent     = periodLabels[currentPeriod] || 'Últimas 24h';
-  document.getElementById('subAvg').textContent     = `${data.length} registros`;
-
-  // color warnings
-  const curEl = document.getElementById('valCurrent');
-  curEl.className = 'kpi-value';
-  if (cur > thresholds.high || cur < thresholds.low) curEl.classList.add('warn');
-
-  evaluateAlerts(cur);
-}
-
-function evaluateAlerts(cur) {
-  if (cur === null) return;
-  const bar = document.getElementById('alertBar');
-  const msg = document.getElementById('alertMsg');
-  if (cur > thresholds.high) {
-    bar.classList.add('visible');
-    msg.textContent = `⚠ Temperatura ALTA: ${cur.toFixed(1)}°C (límite: ${thresholds.high}°C)`;
-    document.getElementById('statusDot').classList.add('warn');
-  } else if (cur < thresholds.low) {
-    bar.classList.add('visible');
-    msg.textContent = `⚠ Temperatura BAJA: ${cur.toFixed(1)}°C (límite: ${thresholds.low}°C)`;
-    document.getElementById('statusDot').classList.add('warn');
-  } else {
-    bar.classList.remove('visible');
-    document.getElementById('statusDot').classList.remove('warn');
-  }
-}
-
-// ─────────────────────────────────────────────
-// CHART
-// ─────────────────────────────────────────────
-function renderChart(data) {
-  document.getElementById('chartLoading').style.display = 'none';
-  const canvas = document.getElementById('tempChart');
-  canvas.style.display = 'block';
-
-  document.getElementById('chartMeta').textContent = data.length + ' registros';
-
-  // String labels — sin adaptador de fechas
-  const labels   = data.map(d => formatTime(d.timestamp));
-  const values   = data.map(d => d.temperature);
-  const highLine = data.map(() => thresholds.high);
-  const lowLine  = data.map(() => thresholds.low);
-
-  if (chart) { chart.destroy(); chart = null; }
-
-  chart = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Temperatura',
-          data: values,
-          borderColor: '#00c8ff',
-          backgroundColor: 'rgba(0,200,255,0.06)',
-          borderWidth: 2,
-          pointRadius: data.length > 100 ? 0 : 3,
-          pointHoverRadius: 5,
-          tension: 0.3,
-          fill: true,
-          spanGaps: false
-        },
-        {
-          label: 'Limite alto',
-          data: highLine,
-          borderColor: 'rgba(255,107,53,0.6)',
-          borderWidth: 1,
-          borderDash: [4,4],
-          pointRadius: 0,
-          fill: false
-        },
-        {
-          label: 'Limite bajo',
-          data: lowLine,
-          borderColor: 'rgba(167,139,250,0.6)',
-          borderWidth: 1,
-          borderDash: [4,4],
-          pointRadius: 0,
-          fill: false
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          labels: {
-            color: '#6b9ab8',
-            font: { family: 'DM Mono', size: 11 },
-            boxWidth: 12
+          if (!Array.isArray(data) || data.length === 0) {
+            showError("Sin datos en el período seleccionado.");
+            setStatus("warn", "Sin datos");
+            return;
           }
-        },
-        tooltip: {
-          backgroundColor: '#091628',
-          borderColor: '#1a3050',
-          borderWidth: 1,
-          titleColor: '#6b9ab8',
-          bodyColor: '#e8f4ff',
-          callbacks: {
-            label: function(item) {
-              return ' ' + item.dataset.label + ': ' + Number(item.raw).toFixed(2) + 'C';
+
+          // Ordenar por timestamp ascendente
+          data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+          // Deduplicar por minuto
+          const deduped = [];
+          let lastMinute = null;
+          for (const d of data) {
+            const minute = new Date(d.timestamp).toISOString().slice(0, 16);
+            if (minute !== lastMinute) {
+              deduped.push(d);
+              lastMinute = minute;
             }
           }
-        }
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: '#3a6080',
-            font: { family: 'DM Mono', size: 10 },
-            maxTicksLimit: window.innerWidth < 480 ? 4 : 8,
-            maxRotation: 0
-          },
-          grid: { color: 'rgba(26,48,80,0.5)' }
-        },
-        y: {
-          ticks: {
-            color: '#3a6080',
-            font: { family: 'DM Mono', size: 10 },
-            callback: function(v) { return v + 'C'; }
-          },
-          grid: { color: 'rgba(26,48,80,0.5)' }
+
+          // Rellenar gaps para eje temporal completo
+          const finalData = fillGaps(deduped, currentPeriod);
+
+          renderKPIs(deduped); // KPIs usan solo datos reales
+          renderChart(finalData); // Chart usa datos con gaps rellenos
+          renderRSSI(deduped);
+          renderStats(deduped);
+          setStatus("ok", "En línea");
+          document.getElementById("lastUpdate").textContent =
+            "Actualizado " + new Date().toLocaleTimeString("es-AR");
+        } catch (err) {
+          console.error(err);
+          showError(`Error al cargar datos: ${err.message}`);
+          setStatus("warn", "Error de conexión");
         }
       }
-    }
-  });
-}
 
-// ─────────────────────────────────────────────
-// RSSI
-// ─────────────────────────────────────────────
-function renderRSSI(data) {
-  const rssiFilt = data.map(d => d.rssi).filter(v => v != null && v !== 0);
-  if (rssiFilt.length === 0) return;
+      function fillGaps(data, period) {
+        const now = new Date();
+        const msBack = {
+          "24h": 24 * 60 * 60 * 1000,
+          "7d": 7 * 24 * 60 * 60 * 1000,
+          "30d": 30 * 24 * 60 * 60 * 1000,
+        };
+        const start = new Date(
+          now.getTime() - (msBack[period] || msBack["24h"]),
+        );
 
-  const latest  = rssiFilt[rssiFilt.length - 1];
-  const avg     = rssiFilt.reduce((a,b) => a+b, 0) / rssiFilt.length;
-  const minRssi = Math.min(...rssiFilt);
+        // Intervalo entre puntos según período
+        const intervalMin = period === "24h" ? 5 : period === "7d" ? 60 : 360;
+        const intervalMs = intervalMin * 60 * 1000;
 
-  const toPercent = v => Math.max(0, Math.min(100, ((v + 100) / 70) * 100));
+        // Mapa de datos reales por slot de tiempo
+        const dataMap = new Map();
+        for (const d of data) {
+          const slot =
+            Math.round(new Date(d.timestamp).getTime() / intervalMs) *
+            intervalMs;
+          if (!dataMap.has(slot)) dataMap.set(slot, d);
+        }
 
-  document.getElementById('rssiValCurrent').textContent = `${latest} dBm`;
-  document.getElementById('rssiValAvg').textContent     = `${avg.toFixed(0)} dBm`;
-  document.getElementById('rssiValMin').textContent     = `${minRssi} dBm`;
+        // Generar todos los slots del período
+        const result = [];
+        let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
+        while (cursor <= now.getTime()) {
+          const existing = dataMap.get(cursor);
+          if (existing) {
+            result.push(existing);
+          } else {
+            result.push({
+              timestamp: new Date(cursor).toISOString(),
+              temperature: null,
+              minTemp: null,
+              maxTemp: null,
+              rssi: null,
+            });
+          }
+          cursor += intervalMs;
+        }
+        return result;
+      }
 
-  document.getElementById('rssiBarCurrent').style.width = toPercent(latest) + '%';
-  document.getElementById('rssiBarAvg').style.width     = toPercent(avg) + '%';
-  document.getElementById('rssiBarMin').style.width     = toPercent(minRssi) + '%';
-}
+      // ─────────────────────────────────────────────
+      // KPIs
+      // ─────────────────────────────────────────────
+      function renderKPIs(data) {
+        const temps = data.map((d) => d.temperature);
+        const latest = data[data.length - 1];
+        const cur = latest.temperature;
+        const min = Math.min(...temps);
+        const max = Math.max(...temps);
+        const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
 
-// ─────────────────────────────────────────────
-// STATS
-// ─────────────────────────────────────────────
-function renderStats(data) {
-  const temps   = data.map(d => d.temperature);
-  const outOfRange = temps.filter(t => t > thresholds.high || t < thresholds.low).length;
-  const pct     = ((outOfRange / temps.length) * 100).toFixed(1);
-  const latest  = data[data.length - 1];
+        const fmt = (v) => v.toFixed(1);
 
-  document.getElementById('statCount').textContent = data.length;
-  document.getElementById('statLast').textContent  = formatTime(latest.timestamp);
-  document.getElementById('statRange').textContent = `${thresholds.low}°C — ${thresholds.high}°C`;
-  document.getElementById('statOut').textContent   = `${outOfRange} registros (${pct}%)`;
-}
+        document.getElementById("valCurrent").innerHTML =
+          `${fmt(cur)}<span class="kpi-unit">°C</span>`;
+        document.getElementById("valMin").innerHTML =
+          `${fmt(min)}<span class="kpi-unit">°C</span>`;
+        document.getElementById("valMax").innerHTML =
+          `${fmt(max)}<span class="kpi-unit">°C</span>`;
+        document.getElementById("valAvg").innerHTML =
+          `${fmt(avg)}<span class="kpi-unit">°C</span>`;
 
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
-function setStatus(type, text) {
-  const dot  = document.getElementById('statusDot');
-  const span = document.getElementById('statusText');
-  dot.className  = type === 'warn' ? 'dot warn' : 'dot';
-  span.textContent = text;
-}
+        document.getElementById("subCurrent").textContent = formatTime(
+          latest.timestamp,
+        );
+        const periodLabels = {
+          "24h": "Últimas 24h",
+          "7d": "Últimos 7 días",
+          "30d": "Últimos 30 días",
+        };
+        document.getElementById("subMin").textContent =
+          periodLabels[currentPeriod] || "Últimas 24h";
+        document.getElementById("subMax").textContent =
+          periodLabels[currentPeriod] || "Últimas 24h";
+        document.getElementById("subAvg").textContent =
+          `${data.length} registros`;
 
-function showError(msg) {
-  document.getElementById('chartLoading').style.display = 'flex';
-  document.getElementById('chartLoading').innerHTML =
-    `<span class="error-msg">${msg}</span>`;
-  document.getElementById('tempChart').style.display = 'none';
-}
+        // color warnings
+        const curEl = document.getElementById("valCurrent");
+        curEl.className = "kpi-value";
+        if (cur > thresholds.high || cur < thresholds.low)
+          curEl.classList.add("warn");
 
-function formatTime(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleString('es-AR', {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
-}
+        evaluateAlerts(cur);
+      }
 
+      function evaluateAlerts(cur) {
+        if (cur === null) return;
+        const bar = document.getElementById("alertBar");
+        const msg = document.getElementById("alertMsg");
+        if (cur > thresholds.high) {
+          bar.classList.add("visible");
+          msg.textContent = `⚠ Temperatura ALTA: ${cur.toFixed(1)}°C (límite: ${thresholds.high}°C)`;
+          document.getElementById("statusDot").classList.add("warn");
+        } else if (cur < thresholds.low) {
+          bar.classList.add("visible");
+          msg.textContent = `⚠ Temperatura BAJA: ${cur.toFixed(1)}°C (límite: ${thresholds.low}°C)`;
+          document.getElementById("statusDot").classList.add("warn");
+        } else {
+          bar.classList.remove("visible");
+          document.getElementById("statusDot").classList.remove("warn");
+        }
+      }
 
+      // ─────────────────────────────────────────────
+      // CHART
+      // ─────────────────────────────────────────────
+      function renderChart(data) {
+        document.getElementById("chartLoading").style.display = "none";
+        const canvas = document.getElementById("tempChart");
+        canvas.style.display = "block";
 
-function setPeriod(period, btn) {
-    currentPeriod = period;
-    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
-    document.getElementById('chartTitle').textContent =
-        'Historial de temperatura — ' + titles[period];
-    document.getElementById('chartLoading').style.display = 'flex';
-    document.getElementById('chartLoading').innerHTML =
-        '<div class="spinner"></div><span>Cargando datos...</span>';
-    document.getElementById('tempChart').style.display = 'none';
-    loadData();
-}
-</script>
-</body>
+        document.getElementById("chartMeta").textContent =
+          data.length + " registros";
+
+        // String labels — sin adaptador de fechas
+        const labels = data.map((d) => formatTime(d.timestamp));
+        const values = data.map((d) => d.temperature);
+        const highLine = data.map(() => thresholds.high);
+        const lowLine = data.map(() => thresholds.low);
+
+        if (chart) {
+          chart.destroy();
+          chart = null;
+        }
+
+        chart = new Chart(canvas, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Temperatura",
+                data: values,
+                borderColor: "#00c8ff",
+                backgroundColor: "rgba(0,200,255,0.06)",
+                borderWidth: 2,
+                pointRadius: data.length > 100 ? 0 : 3,
+                pointHoverRadius: 5,
+                tension: 0.3,
+                fill: true,
+                spanGaps: false,
+              },
+              {
+                label: "Limite alto",
+                data: highLine,
+                borderColor: "rgba(255,107,53,0.6)",
+                borderWidth: 1,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false,
+              },
+              {
+                label: "Limite bajo",
+                data: lowLine,
+                borderColor: "rgba(167,139,250,0.6)",
+                borderWidth: 1,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: {
+                labels: {
+                  color: "#6b9ab8",
+                  font: { family: "DM Mono", size: 11 },
+                  boxWidth: 12,
+                },
+              },
+              tooltip: {
+                backgroundColor: "#091628",
+                borderColor: "#1a3050",
+                borderWidth: 1,
+                titleColor: "#6b9ab8",
+                bodyColor: "#e8f4ff",
+                callbacks: {
+                  label: function (item) {
+                    return (
+                      " " +
+                      item.dataset.label +
+                      ": " +
+                      Number(item.raw).toFixed(2) +
+                      "C"
+                    );
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: {
+                  color: "#3a6080",
+                  font: { family: "DM Mono", size: 10 },
+                  maxTicksLimit: window.innerWidth < 480 ? 4 : 8,
+                  maxRotation: 0,
+                },
+                grid: { color: "rgba(26,48,80,0.5)" },
+              },
+              y: {
+                ticks: {
+                  color: "#3a6080",
+                  font: { family: "DM Mono", size: 10 },
+                  callback: function (v) {
+                    return v + "C";
+                  },
+                },
+                grid: { color: "rgba(26,48,80,0.5)" },
+              },
+            },
+          },
+        });
+      }
+
+      // ─────────────────────────────────────────────
+      // RSSI
+      // ─────────────────────────────────────────────
+      function renderRSSI(data) {
+        const rssiFilt = data
+          .map((d) => d.rssi)
+          .filter((v) => v != null && v !== 0);
+        if (rssiFilt.length === 0) return;
+
+        const latest = rssiFilt[rssiFilt.length - 1];
+        const avg = rssiFilt.reduce((a, b) => a + b, 0) / rssiFilt.length;
+        const minRssi = Math.min(...rssiFilt);
+
+        const toPercent = (v) =>
+          Math.max(0, Math.min(100, ((v + 100) / 70) * 100));
+
+        document.getElementById("rssiValCurrent").textContent = `${latest} dBm`;
+        document.getElementById("rssiValAvg").textContent =
+          `${avg.toFixed(0)} dBm`;
+        document.getElementById("rssiValMin").textContent = `${minRssi} dBm`;
+
+        document.getElementById("rssiBarCurrent").style.width =
+          toPercent(latest) + "%";
+        document.getElementById("rssiBarAvg").style.width =
+          toPercent(avg) + "%";
+        document.getElementById("rssiBarMin").style.width =
+          toPercent(minRssi) + "%";
+      }
+
+      // ─────────────────────────────────────────────
+      // STATS
+      // ─────────────────────────────────────────────
+      function renderStats(data) {
+        const temps = data.map((d) => d.temperature);
+        const outOfRange = temps.filter(
+          (t) => t > thresholds.high || t < thresholds.low,
+        ).length;
+        const pct = ((outOfRange / temps.length) * 100).toFixed(1);
+        const latest = data[data.length - 1];
+
+        document.getElementById("statCount").textContent = data.length;
+        document.getElementById("statLast").textContent = formatTime(
+          latest.timestamp,
+        );
+        document.getElementById("statRange").textContent =
+          `${thresholds.low}°C — ${thresholds.high}°C`;
+        document.getElementById("statOut").textContent =
+          `${outOfRange} registros (${pct}%)`;
+      }
+
+      // ─────────────────────────────────────────────
+      // HELPERS
+      // ─────────────────────────────────────────────
+      function setStatus(type, text) {
+        const dot = document.getElementById("statusDot");
+        const span = document.getElementById("statusText");
+        dot.className = type === "warn" ? "dot warn" : "dot";
+        span.textContent = text;
+      }
+
+      function showError(msg) {
+        document.getElementById("chartLoading").style.display = "flex";
+        document.getElementById("chartLoading").innerHTML =
+          `<span class="error-msg">${msg}</span>`;
+        document.getElementById("tempChart").style.display = "none";
+      }
+
+      function formatTime(ts) {
+        if (!ts) return "—";
+        return new Date(ts).toLocaleString("es-AR", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      function setPeriod(period, btn) {
+        currentPeriod = period;
+        document
+          .querySelectorAll(".period-btn")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const titles = {
+          "24h": "últimas 24h",
+          "7d": "últimos 7 días",
+          "30d": "últimos 30 días",
+        };
+        document.getElementById("chartTitle").textContent =
+          "Historial de temperatura — " + titles[period];
+        document.getElementById("chartLoading").style.display = "flex";
+        document.getElementById("chartLoading").innerHTML =
+          '<div class="spinner"></div><span>Cargando datos...</span>';
+        document.getElementById("tempChart").style.display = "none";
+        loadData();
+      }
+    </script>
+  </body>
 </html>
