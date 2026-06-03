@@ -504,7 +504,7 @@ function setPeriod(period, btn) {
 </header>
 
 <main>
-<div id="debug-panel" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#00ff88;font-family:monospace;font-size:11px;padding:8px;max-height:120px;overflow-y:auto;z-index:9999">Debug log...</div>
+
 
   <!-- CONFIG BANNER -->
   <div class="config-banner" id="configBanner">
@@ -622,15 +622,6 @@ function setPeriod(period, btn) {
 
 <script>
 // ─────────────────────────────────────────────
-// DEBUG
-// ─────────────────────────────────────────────
-function dbg(msg) {
-    const p = document.getElementById('debug-panel');
-    if (p) p.innerHTML += '<br>' + new Date().toLocaleTimeString() + ' ' + msg;
-    console.log(msg);
-}
-
-// ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
 const STORAGE_KEY_URL    = 'fridgeApiUrl';
@@ -648,28 +639,20 @@ let currentPeriod = '24h';
 document.addEventListener('DOMContentLoaded', async () => {
     // Cargar umbrales desde Device Twin al arrancar
     try {
-        dbg('Fetching thresholds from twin...');
         const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getThresholds');
-        dbg('getThresholds status: ' + res.status);
         if (res.ok) {
             const data = await res.json();
-            dbg('Twin data: ' + JSON.stringify(data));
             thresholds.high = data.alertTempHigh;
             thresholds.low  = data.alertTempLow;
             localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-            dbg('Thresholds applied: high=' + thresholds.high + ' low=' + thresholds.low);
-        } else {
-            dbg('ERROR getThresholds: HTTP ' + res.status);
         }
     } catch (err) {
-        dbg('FETCH ERROR: ' + err.message);
+        console.warn('Error cargando umbrales:', err.message);
     }
-    dbg('localStorage: ' + localStorage.getItem(STORAGE_KEY_THRESH));
 
     // Actualizar inputs con valores del twin
     document.getElementById('threshHigh').value = thresholds.high;
     document.getElementById('threshLow').value  = thresholds.low;
-    dbg('Inputs set: high=' + document.getElementById('threshHigh').value + ' low=' + document.getElementById('threshLow').value);
 
     // Arrancar dashboard
     document.getElementById('configBanner').classList.add('hidden');
@@ -681,7 +664,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
         setStatus('warn', 'Sin configurar');
     }
-});
+
+    // Verificar valores finales
+    setTimeout(() => {
+        console.log('Thresholds:', thresholds);
+    }, 500);
+});;
 
 function saveApiUrl() {
   const val = document.getElementById('apiUrlInput').value.trim();
