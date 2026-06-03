@@ -269,6 +269,8 @@ function setPeriod(period, btn) {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: .5rem;
   }
 
   .chart-title {
@@ -287,7 +289,7 @@ function setPeriod(period, btn) {
 
   .chart-wrap {
     position: relative;
-    height: 260px;
+    height: 300px;
   }
 
   /* BOTTOM GRID */
@@ -297,9 +299,60 @@ function setPeriod(period, btn) {
     gap: 1rem;
   }
 
-  @media (max-width: 640px) {
-    .bottom-grid { grid-template-columns: 1fr; }
+  /* ── TABLET (max 768px) ── */
+  @media (max-width: 768px) {
+    header {
+      padding: 1rem 1.25rem;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+    .logo { font-size: 1rem; }
+    .last-update { display: none; }
+    main { padding: 1rem; }
+    .kpi-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: .75rem;
+    }
+    .kpi { padding: 1rem 1.1rem; }
     .kpi-value { font-size: 2rem; }
+    .kpi-value.small { font-size: 1.4rem; }
+    .chart-wrap { height: 320px; }
+    .chart-header { flex-direction: column; align-items: flex-start; gap: .75rem; }
+    .chart-header > div:last-child { width: 100%; justify-content: space-between; }
+    .period-btn { padding: .4rem .9rem; font-size: .75rem; flex: 1; text-align: center; }
+    .bottom-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── MOBILE (max 480px) ── */
+  @media (max-width: 480px) {
+    header { padding: .75rem 1rem; }
+    .logo { font-size: .95rem; }
+    .status-pill { font-size: .6rem; padding: .3rem .6rem; }
+    main { padding: .75rem; }
+    .kpi-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: .5rem;
+      margin-bottom: 1rem;
+    }
+    .kpi { padding: .85rem 1rem; border-radius: 10px; }
+    .kpi-label { font-size: .6rem; margin-bottom: .3rem; }
+    .kpi-value { font-size: 1.75rem; }
+    .kpi-value.small { font-size: 1.3rem; }
+    .kpi-sub { font-size: .6rem; }
+    .chart-card { padding: 1rem; border-radius: 10px; }
+    .chart-wrap { height: 280px; }
+    .chart-title { font-size: .85rem; }
+    .chart-meta { font-size: .6rem; }
+    .period-btn { padding: .45rem .5rem; font-size: .7rem; }
+    .info-card { padding: 1rem; border-radius: 10px; }
+    .info-card-title { font-size: .6rem; }
+    .stats-table td { font-size: .72rem; padding: .45rem 0; }
+    .threshold-row label { font-size: .7rem; min-width: 70px; }
+    .threshold-row input { width: 65px; font-size: .75rem; }
+    .threshold-save { font-size: .7rem; padding: .4rem .8rem; }
+    .rssi-label { font-size: .7rem; min-width: 50px; }
+    .rssi-val { font-size: .7rem; }
+    .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
   }
 
   .info-card {
@@ -492,7 +545,7 @@ function setPeriod(period, btn) {
       <div class="chart-title" id="chartTitle">Historial de temperatura — últimas 24h</div>
       <div style="display:flex;align-items:center;gap:.75rem">
         <div class="chart-meta" id="chartMeta">— registros</div>
-        <div style="display:flex;gap:4px">
+        <div style="display:flex;gap:6px">
           <button class="period-btn active" onclick="setPeriod('24h', this)">24h</button>
           <button class="period-btn" onclick="setPeriod('7d', this)">7d</button>
           <button class="period-btn" onclick="setPeriod('30d', this)">30d</button>
@@ -834,7 +887,7 @@ function renderChart(data) {
           ticks: {
             color: '#3a6080',
             font: { family: 'DM Mono', size: 10 },
-            maxTicksLimit: 8,
+            maxTicksLimit: window.innerWidth < 480 ? 4 : 8,
             maxRotation: 0
           },
           grid: { color: 'rgba(26,48,80,0.5)' }
