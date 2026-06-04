@@ -402,6 +402,28 @@ main {
   .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
 }
 
+/* ── CALENDAR ─────────────────────────────────────────── */
+.cal-day {
+  width: 48px; height: 44px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1px;
+  line-height: 1.2;
+}
+.cal-day:hover  { border-color: var(--accent); color: var(--accent); }
+.cal-day.active { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500; }
+.cal-day.today  { border-color: var(--accent); color: var(--accent); }
+.cal-day .cal-month { font-size: .55rem; opacity: .7; }
+.cal-day .cal-num   { font-size: .8rem; font-weight: 500; }
+
 /* ── PWA INSTALL BANNER ───────────────────────────────── */
 .pwa-banner {
   background: rgba(0,200,255,.08);
@@ -506,10 +528,12 @@ main {
 
     <!-- COMPARE PANEL -->
     <div class="compare-panel" id="comparePanel">
-      <div class="compare-checkboxes">
-        <label><input type="checkbox" id="cmpYesterday" onchange="loadData()"> Ayer</label>
-        <label><input type="checkbox" id="cmpLastWeek" onchange="loadData()"> Semana pasada</label>
-        <label><input type="checkbox" id="cmpLastMonth" onchange="loadData()"> Mes pasado (mismo día)</label>
+      <div style="font-size:.75rem;color:var(--text2);margin-bottom:.6rem">Seleccioná hasta 2 días para comparar:</div>
+      <div id="calendarWrap" style="display:flex;flex-wrap:wrap;gap:.35rem"></div>
+      <div style="margin-top:.6rem;font-size:.65rem;color:var(--text3)">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent);margin-right:4px;vertical-align:middle"></span>Seleccionado
+        &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--bg3);border:1px solid var(--border);margin-right:4px;vertical-align:middle"></span>Con datos
       </div>
     </div>
 
@@ -716,20 +740,90 @@ async function saveThresholds() {
 // ─────────────────────────────────────────────
 // COMPARE
 // ─────────────────────────────────────────────
-function toggleCompare() {
+let selectedCompareDays = [];  // array of 'YYYY-MM-DD' strings
+let availableDays       = [];
+
+const COMPARE_COLORS = [
+    'rgba(255,200,0,0.8)',
+    'rgba(0,229,160,0.8)',
+];
+
+async function toggleCompare() {
     const panel = document.getElementById('comparePanel');
     const btn   = document.getElementById('compareToggleBtn');
     const visible = panel.classList.toggle('visible');
     btn.classList.toggle('active', visible);
+
+    if (visible && availableDays.length === 0) {
+        await loadAvailableDays();
+    }
     if (!visible) {
-        document.getElementById('cmpYesterday').checked  = false;
-        document.getElementById('cmpLastWeek').checked   = false;
-        document.getElementById('cmpLastMonth').checked  = false;
+        selectedCompareDays = [];
         loadData();
     }
 }
 
-async function fetchCompareData(offsetDays) {
+async function loadAvailableDays() {
+    try {
+        const res  = await fetch(`${API_BASE}/getAvailableDays`);
+        if (!res.ok) return;
+        const data = await res.json();
+        availableDays = data.availableDays || [];
+        renderCalendar();
+    } catch (err) {
+        console.warn('Error loading available days:', err.message);
+    }
+}
+
+function renderCalendar() {
+    const wrap   = document.getElementById('calendarWrap');
+    const today  = new Date().toISOString().slice(0, 10);
+    wrap.innerHTML = '';
+
+    // Show available days excluding today, most recent first
+    const days = [...availableDays].reverse().filter(d => d !== today);
+
+    if (days.length === 0) {
+        wrap.innerHTML = '<span style="font-size:.75rem;color:var(--text3)">No hay datos históricos disponibles aún.</span>';
+        return;
+    }
+
+    days.forEach(day => {
+        const date  = new Date(day + 'T12:00:00');
+        const month = date.toLocaleString('es-AR', { month: 'short' });
+        const num   = date.getDate();
+        const isSelected = selectedCompareDays.includes(day);
+
+        const btn = document.createElement('button');
+        btn.className = 'cal-day' + (isSelected ? ' active' : '');
+        btn.dataset.day = day;
+        btn.innerHTML = `<span class="cal-month">${month}</span><span class="cal-num">${num}</span>`;
+        btn.onclick = () => toggleDaySelection(day);
+        wrap.appendChild(btn);
+    });
+}
+
+function toggleDaySelection(day) {
+    if (selectedCompareDays.includes(day)) {
+        selectedCompareDays = selectedCompareDays.filter(d => d !== day);
+    } else {
+        if (selectedCompareDays.length >= 2) {
+            // Remove oldest selection
+            selectedCompareDays.shift();
+        }
+        selectedCompareDays.push(day);
+    }
+    renderCalendar();
+    loadData();
+}
+
+async function fetchCompareData(targetDay) {
+    // Calculate offsetDays from today to targetDay
+    const today     = new Date(); today.setHours(0,0,0,0);
+    const target    = new Date(targetDay + 'T00:00:00');
+    const offsetMs  = today.getTime() - target.getTime();
+    const offsetDays = Math.round(offsetMs / (24 * 60 * 60 * 1000));
+
     const url = `${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}`;
     try {
         const res  = await fetch(url);
@@ -766,27 +860,21 @@ async function loadData() {
         lastRawData = deduped;
         const finalData = fillGaps(deduped, currentPeriod);
 
-        // Fetch compare data if checkboxes are active
+        // Fetch compare data for selected days
         const cmpDatasets = [];
-        if (document.getElementById('cmpYesterday')?.checked) {
-            const d = await fetchCompareData(1);
+        for (let i = 0; i < selectedCompareDays.length; i++) {
+            const day  = selectedCompareDays[i];
+            const d    = await fetchCompareData(day);
             if (d.length) {
-                const filled = fillGaps(d.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)), currentPeriod);
-                cmpDatasets.push({ label: 'Ayer', data: filled.map(x => x.temperature), color: 'rgba(255,200,0,0.7)' });
-            }
-        }
-        if (document.getElementById('cmpLastWeek')?.checked) {
-            const d = await fetchCompareData(7);
-            if (d.length) {
-                const filled = fillGaps(d.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)), currentPeriod);
-                cmpDatasets.push({ label: 'Semana pasada', data: filled.map(x => x.temperature), color: 'rgba(167,139,250,0.7)' });
-            }
-        }
-        if (document.getElementById('cmpLastMonth')?.checked) {
-            const d = await fetchCompareData(30);
-            if (d.length) {
-                const filled = fillGaps(d.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)), currentPeriod);
-                cmpDatasets.push({ label: 'Mes pasado', data: filled.map(x => x.temperature), color: 'rgba(0,229,160,0.7)' });
+                const sorted = d.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+                const filled = fillGaps(sorted, currentPeriod);
+                const date   = new Date(day + 'T12:00:00');
+                const label  = date.toLocaleString('es-AR', { day: 'numeric', month: 'short' });
+                cmpDatasets.push({
+                    label: label,
+                    data:  filled.map(x => x.temperature),
+                    color: COMPARE_COLORS[i % COMPARE_COLORS.length]
+                });
             }
         }
 
