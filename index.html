@@ -606,7 +606,7 @@ main {
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
-const API_BASE        = 'https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api';
+const API_BASE           = 'https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api';
 const STORAGE_KEY_URL    = 'fridgeApiUrl';
 const STORAGE_KEY_THRESH = 'fridgeThresholds';
 const STORAGE_KEY_THEME  = 'fridgeTheme';
@@ -672,12 +672,10 @@ function updateChartColors() {
 // INIT
 // ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    // Aplicar tema guardado
     const savedTheme = localStorage.getItem(STORAGE_KEY_THEME) || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
     document.getElementById('themeBtn').textContent = savedTheme === 'dark' ? '☀ Claro' : '☾ Oscuro';
 
-    // Cargar umbrales desde Device Twin
     try {
         const res = await fetch(`${API_BASE}/getThresholds`);
         if (res.ok) {
@@ -740,7 +738,7 @@ async function saveThresholds() {
 // ─────────────────────────────────────────────
 // COMPARE
 // ─────────────────────────────────────────────
-let selectedCompareDays = [];  // array of 'YYYY-MM-DD' strings
+let selectedCompareDays = [];
 let availableDays       = [];
 
 const COMPARE_COLORS = [
@@ -749,20 +747,13 @@ const COMPARE_COLORS = [
 ];
 
 async function toggleCompare() {
-    console.log('toggleCompare called');
     const panel = document.getElementById('comparePanel');
     const btn   = document.getElementById('compareToggleBtn');
-    console.log('panel:', panel);
-    console.log('panel visible before:', panel.classList.contains('visible'));
-    
     const visible = panel.classList.toggle('visible');
     btn.classList.toggle('active', visible);
-    console.log('panel visible after:', visible);
 
     if (visible && availableDays.length === 0) {
-        console.log('Loading available days...');
         await loadAvailableDays();
-        console.log('Available days loaded:', availableDays);
     }
     if (!visible) {
         selectedCompareDays = [];
@@ -787,7 +778,6 @@ function renderCalendar() {
     const today  = new Date().toISOString().slice(0, 10);
     wrap.innerHTML = '';
 
-    // Show available days excluding today, most recent first
     const days = [...availableDays].reverse().filter(d => d !== today);
 
     if (days.length === 0) {
@@ -815,7 +805,6 @@ function toggleDaySelection(day) {
         selectedCompareDays = selectedCompareDays.filter(d => d !== day);
     } else {
         if (selectedCompareDays.length >= 2) {
-            // Remove oldest selection
             selectedCompareDays.shift();
         }
         selectedCompareDays.push(day);
@@ -825,10 +814,9 @@ function toggleDaySelection(day) {
 }
 
 async function fetchCompareData(targetDay) {
-    // Calculate offsetDays from today to targetDay
-    const today     = new Date(); today.setHours(0,0,0,0);
-    const target    = new Date(targetDay + 'T00:00:00');
-    const offsetMs  = today.getTime() - target.getTime();
+    const today      = new Date(); today.setHours(0,0,0,0);
+    const target     = new Date(targetDay + 'T00:00:00');
+    const offsetMs   = today.getTime() - target.getTime();
     const offsetDays = Math.round(offsetMs / (24 * 60 * 60 * 1000));
 
     const url = `${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}`;
@@ -867,16 +855,32 @@ async function loadData() {
         lastRawData = deduped;
         const finalData = fillGaps(deduped, currentPeriod);
 
-        // Fetch compare data for selected days
+        // ── COMPARE DATASETS ──────────────────────────────
+        // FIX: desplazamos los timestamps del día comparado al día actual
+        // para que fillGaps los coloque en los mismos slots que el dataset principal
         const cmpDatasets = [];
         for (let i = 0; i < selectedCompareDays.length; i++) {
-            const day  = selectedCompareDays[i];
-            const d    = await fetchCompareData(day);
+            const day = selectedCompareDays[i];
+            const d   = await fetchCompareData(day);
             if (d.length) {
-                const sorted = d.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-                const filled = fillGaps(sorted, currentPeriod);
-                const date   = new Date(day + 'T12:00:00');
-                const label  = date.toLocaleString('es-AR', { day: 'numeric', month: 'short' });
+                const sorted = d.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+                // Calcular cuántos ms hay entre el día comparado y hoy (medianoche local)
+                const todayMidnight  = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+                const targetMidnight = new Date(day + 'T00:00:00');
+                const shiftMs        = todayMidnight.getTime() - targetMidnight.getTime();
+
+                // Proyectar cada timestamp al equivalente horario de hoy
+                const shifted = sorted.map(r => ({
+                    ...r,
+                    timestamp: new Date(new Date(r.timestamp).getTime() + shiftMs).toISOString()
+                }));
+
+                // Ahora fillGaps genera slots alineados con el dataset principal
+                const filled = fillGaps(shifted, currentPeriod);
+
+                const date  = new Date(day + 'T12:00:00');
+                const label = date.toLocaleString('es-AR', { day: 'numeric', month: 'short' });
                 cmpDatasets.push({
                     label: label,
                     data:  filled.map(x => x.temperature),
