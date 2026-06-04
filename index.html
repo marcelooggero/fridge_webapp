@@ -1,501 +1,439 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#050e1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cámara Fría">
+<link rel="manifest" href="manifest.json">
 <title>Cámara Fría — Monitor</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js">
-function setPeriod(period, btn) {
-    currentPeriod = period;
-    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
-    document.getElementById('chartTitle').textContent =
-        'Historial de temperatura — ' + titles[period];
-    document.getElementById('chartLoading').style.display = 'flex';
-    document.getElementById('chartLoading').innerHTML =
-        '<div class="spinner"></div><span>Cargando datos...</span>';
-    document.getElementById('tempChart').style.display = 'none';
-    loadData();
-}
-</script>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <style>
-  :root {
-    --bg:        #050e1a;
-    --bg2:       #091628;
-    --bg3:       #0d1f35;
-    --border:    #1a3050;
-    --accent:    #00c8ff;
-    --accent2:   #0077ff;
-    --cold:      #7ee8ff;
-    --warn:      #ff6b35;
-    --ok:        #00e5a0;
-    --text:      #e8f4ff;
-    --text2:     #6b9ab8;
-    --text3:     #3a6080;
-    --font-mono: 'DM Mono', monospace;
-    --font-disp: 'Syne', sans-serif;
-  }
+/* ── THEMES ───────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --bg:        #050e1a;
+  --bg2:       #091628;
+  --bg3:       #0d1f35;
+  --border:    #1a3050;
+  --accent:    #00c8ff;
+  --accent2:   #0077ff;
+  --cold:      #7ee8ff;
+  --warn:      #ff6b35;
+  --ok:        #00e5a0;
+  --text:      #e8f4ff;
+  --text2:     #6b9ab8;
+  --text3:     #3a6080;
+  --font-mono: 'DM Mono', monospace;
+  --font-disp: 'Syne', sans-serif;
+  --grid-color: rgba(26,48,80,0.5);
+}
+[data-theme="light"] {
+  --bg:        #f0f4f8;
+  --bg2:       #ffffff;
+  --bg3:       #e8eef5;
+  --border:    #c8d8e8;
+  --accent:    #0077cc;
+  --accent2:   #0055aa;
+  --cold:      #0066aa;
+  --warn:      #dd4400;
+  --ok:        #008855;
+  --text:      #0a1a2e;
+  --text2:     #3a6080;
+  --text3:     #7a9ab8;
+  --grid-color: rgba(150,180,210,0.4);
+}
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-mono);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background .3s, color .3s;
+}
 
-  /* background grid */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--border) 1px, transparent 1px),
-      linear-gradient(90deg, var(--border) 1px, transparent 1px);
-    background-size: 40px 40px;
-    opacity: 0.25;
-    pointer-events: none;
-  }
+[data-theme="dark"] body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.25;
+  pointer-events: none;
+}
 
-  /* top glow */
-  body::after {
-    content: '';
-    position: fixed;
-    top: -200px; left: 50%;
-    transform: translateX(-50%);
-    width: 600px; height: 400px;
-    background: radial-gradient(ellipse, rgba(0,200,255,0.08) 0%, transparent 70%);
-    pointer-events: none;
-  }
+[data-theme="dark"] body::after {
+  content: '';
+  position: fixed;
+  top: -200px; left: 50%;
+  transform: translateX(-50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse, rgba(0,200,255,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
 
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid var(--border);
-    position: relative;
-    z-index: 1;
-  }
+/* ── HEADER ───────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+}
+.logo {
+  font-family: var(--font-disp);
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: .05em;
+  color: var(--text);
+}
+.logo span { color: var(--accent); }
+.header-right { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.status-pill {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text2); border: 1px solid var(--border);
+  padding: .35rem .75rem; border-radius: 999px;
+}
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 8px var(--ok);
+  animation: pulse 2s infinite;
+}
+.dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.last-update { font-size: .65rem; color: var(--text3); letter-spacing: .08em; }
 
-  .logo {
-    font-family: var(--font-disp);
-    font-weight: 800;
-    font-size: 1.1rem;
-    letter-spacing: .05em;
-    color: var(--text);
-  }
+/* Theme toggle */
+.theme-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: 999px;
+  padding: .35rem .75rem;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: .05em;
+}
+.theme-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  .logo span { color: var(--accent); }
+/* ── MAIN ─────────────────────────────────────────────── */
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem;
+  position: relative;
+  z-index: 1;
+}
 
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    font-size: .7rem;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--text2);
-    border: 1px solid var(--border);
-    padding: .35rem .75rem;
-    border-radius: 999px;
-  }
+/* ── CONFIG BANNER ────────────────────────────────────── */
+.config-banner {
+  background: rgba(255,107,53,.08);
+  border: 1px solid rgba(255,107,53,.3);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 2rem;
+  font-size: .8rem;
+  color: #ffb08a;
+  display: flex; align-items: center; gap: .75rem;
+}
+.config-banner.hidden { display: none; }
+.config-banner input {
+  flex: 1;
+  background: rgba(255,107,53,.1);
+  border: 1px solid rgba(255,107,53,.4);
+  border-radius: 6px;
+  padding: .4rem .75rem;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  outline: none;
+}
+.config-banner button {
+  background: var(--warn); color: #fff;
+  border: none; border-radius: 6px;
+  padding: .4rem .9rem;
+  font-family: var(--font-mono); font-size: .75rem;
+  cursor: pointer; white-space: nowrap;
+}
 
-  .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 8px var(--ok);
-    animation: pulse 2s infinite;
-  }
+/* ── ALERT BAR ────────────────────────────────────────── */
+.alert-bar {
+  display: none;
+  background: rgba(255,107,53,.1);
+  border: 1px solid rgba(255,107,53,.5);
+  border-radius: 8px;
+  padding: .75rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: .8rem;
+  color: var(--warn);
+  letter-spacing: .05em;
+  animation: flash 1s infinite;
+}
+.alert-bar.visible { display: flex; align-items: center; gap: .75rem; }
+@keyframes flash { 0%,100%{opacity:1} 50%{opacity:.6} }
 
-  .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+/* ── KPI GRID ─────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.kpi {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .3s, background .3s;
+}
+.kpi::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  opacity: 0.6;
+}
+.kpi-label {
+  font-size: .65rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text3); margin-bottom: .5rem;
+}
+.kpi-value {
+  font-family: var(--font-disp);
+  font-size: 2.4rem; font-weight: 800; line-height: 1;
+  color: var(--cold); transition: color .5s;
+}
+.kpi-value.warn { color: var(--warn); }
+.kpi-value.small { font-size: 1.6rem; }
+.kpi-unit { font-size: .75rem; color: var(--text2); margin-left: .2rem; }
+.kpi-sub { font-size: .7rem; color: var(--text3); margin-top: .4rem; }
 
-  @keyframes pulse {
-    0%,100% { opacity: 1; }
-    50%      { opacity: .4; }
-  }
+/* ── CHART CARD ───────────────────────────────────────── */
+.chart-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  transition: background .3s;
+}
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.chart-title {
+  font-family: var(--font-disp);
+  font-weight: 600; font-size: .95rem; color: var(--text);
+}
+.chart-meta {
+  font-size: .65rem; color: var(--text3);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.chart-controls { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.chart-wrap { position: relative; height: 300px; }
 
-  .last-update {
-    font-size: .65rem;
-    color: var(--text3);
-    letter-spacing: .08em;
-  }
+/* ── COMPARE PANEL ────────────────────────────────────── */
+.compare-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: none;
+}
+.compare-panel.visible { display: block; }
+.compare-checkboxes {
+  display: flex; gap: 1rem; flex-wrap: wrap;
+  font-size: .75rem; color: var(--text2);
+}
+.compare-checkboxes label {
+  display: flex; align-items: center; gap: .4rem; cursor: pointer;
+}
+.compare-checkboxes input { cursor: pointer; accent-color: var(--accent); }
 
-  main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 2rem;
-    position: relative;
-    z-index: 1;
-  }
+/* ── PERIOD + COMPARE BUTTONS ─────────────────────────── */
+.period-btn, .compare-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: 6px;
+  padding: .25rem .6rem;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  cursor: pointer;
+  transition: all .2s;
+}
+.period-btn:hover, .compare-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+.period-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.compare-toggle-btn.active { background: rgba(0,200,255,.15); border-color: var(--accent); color: var(--accent); }
 
-  /* CONFIG BANNER */
-  .config-banner {
-    background: rgba(255,107,53,.08);
-    border: 1px solid rgba(255,107,53,.3);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 2rem;
-    font-size: .8rem;
-    color: #ffb08a;
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-  }
-  .config-banner.hidden { display: none; }
-  .config-banner input {
-    flex: 1;
-    background: rgba(255,107,53,.1);
-    border: 1px solid rgba(255,107,53,.4);
-    border-radius: 6px;
-    padding: .4rem .75rem;
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: .8rem;
-    outline: none;
-  }
-  .config-banner button {
-    background: var(--warn);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: .4rem .9rem;
-    font-family: var(--font-mono);
-    font-size: .75rem;
-    cursor: pointer;
-    white-space: nowrap;
-  }
+/* ── BOTTOM GRID ──────────────────────────────────────── */
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.info-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  transition: background .3s;
+}
+.info-card-title {
+  font-size: .65rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text3); margin-bottom: 1rem;
+}
 
-  /* KPI GRID */
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
+/* ── RSSI ─────────────────────────────────────────────── */
+.rssi-wrap { display: flex; flex-direction: column; gap: .5rem; }
+.rssi-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.rssi-label { font-size: .75rem; color: var(--text2); min-width: 60px; }
+.rssi-bar-bg { flex: 1; height: 6px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+.rssi-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .8s ease; }
+.rssi-val { font-size: .75rem; color: var(--text2); min-width: 50px; text-align: right; }
 
-  .kpi {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
-    position: relative;
-    overflow: hidden;
-    transition: border-color .3s;
-  }
+/* ── STATS TABLE ──────────────────────────────────────── */
+.stats-table { width: 100%; border-collapse: collapse; }
+.stats-table tr { border-bottom: 1px solid var(--border); }
+.stats-table tr:last-child { border-bottom: none; }
+.stats-table td { padding: .55rem 0; font-size: .8rem; }
+.stats-table td:first-child { color: var(--text3); }
+.stats-table td:last-child { color: var(--text); text-align: right; font-weight: 500; }
 
-  .kpi::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent2), var(--accent));
-    opacity: 0.6;
-  }
+/* ── THRESHOLDS ───────────────────────────────────────── */
+.threshold-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.threshold-row label { font-size: .75rem; color: var(--text3); min-width: 80px; }
+.threshold-row input {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: .3rem .6rem;
+  color: var(--text); font-family: var(--font-mono); font-size: .8rem; width: 80px; outline: none;
+}
+.threshold-row input:focus { border-color: var(--accent); }
+.threshold-save {
+  margin-top: .75rem;
+  background: transparent; border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 6px; padding: .35rem .9rem;
+  font-family: var(--font-mono); font-size: .75rem; cursor: pointer; transition: background .2s;
+}
+.threshold-save:hover { background: rgba(0,200,255,.1); }
 
-  .kpi.alert-high::before { background: var(--warn); opacity: 1; }
-  .kpi.alert-low::before  { background: #a78bfa; opacity: 1; }
+/* ── EXPORT BTN ───────────────────────────────────────── */
+.export-btn {
+  margin-top: .75rem; margin-left: .5rem;
+  background: transparent; border: 1px solid var(--border); color: var(--text2);
+  border-radius: 6px; padding: .35rem .9rem;
+  font-family: var(--font-mono); font-size: .75rem; cursor: pointer; transition: all .2s;
+}
+.export-btn:hover { border-color: var(--ok); color: var(--ok); }
 
-  .kpi-label {
-    font-size: .65rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--text3);
-    margin-bottom: .5rem;
-  }
+/* ── LOADING ──────────────────────────────────────────── */
+.loading {
+  display: flex; align-items: center; justify-content: center;
+  height: 260px; color: var(--text3); font-size: .8rem;
+  letter-spacing: .1em; flex-direction: column; gap: 1rem;
+}
+.spinner {
+  width: 30px; height: 30px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-msg { color: var(--warn); font-size: .8rem; text-align: center; padding: 2rem; }
 
-  .kpi-value {
-    font-family: var(--font-disp);
-    font-size: 2.4rem;
-    font-weight: 800;
-    line-height: 1;
-    color: var(--cold);
-    transition: color .5s;
-  }
+/* ── RESPONSIVE TABLET ────────────────────────────────── */
+@media (max-width: 768px) {
+  header { padding: 1rem 1.25rem; flex-wrap: wrap; gap: .5rem; }
+  .logo { font-size: 1rem; }
+  .last-update { display: none; }
+  main { padding: 1rem; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .kpi { padding: 1rem 1.1rem; }
+  .kpi-value { font-size: 2rem; }
+  .kpi-value.small { font-size: 1.4rem; }
+  .chart-wrap { height: 320px; }
+  .chart-header { flex-direction: column; align-items: flex-start; gap: .75rem; }
+  .chart-controls { width: 100%; justify-content: space-between; }
+  .period-btn { padding: .4rem .9rem; font-size: .75rem; flex: 1; text-align: center; }
+  .bottom-grid { grid-template-columns: 1fr; }
+}
 
-  .kpi-value.warn  { color: var(--warn); }
-  .kpi-value.small { font-size: 1.6rem; }
+/* ── RESPONSIVE MOBILE ────────────────────────────────── */
+@media (max-width: 480px) {
+  header { padding: .75rem 1rem; }
+  .logo { font-size: .95rem; }
+  .status-pill { font-size: .6rem; padding: .3rem .6rem; }
+  main { padding: .75rem; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: 1rem; }
+  .kpi { padding: .85rem 1rem; border-radius: 10px; }
+  .kpi-label { font-size: .6rem; margin-bottom: .3rem; }
+  .kpi-value { font-size: 1.75rem; }
+  .kpi-value.small { font-size: 1.3rem; }
+  .kpi-sub { font-size: .6rem; }
+  .chart-card { padding: 1rem; border-radius: 10px; }
+  .chart-wrap { height: 280px; }
+  .chart-title { font-size: .85rem; }
+  .period-btn { padding: .45rem .5rem; font-size: .7rem; }
+  .info-card { padding: 1rem; border-radius: 10px; }
+  .info-card-title { font-size: .6rem; }
+  .stats-table td { font-size: .72rem; padding: .45rem 0; }
+  .threshold-row label { font-size: .7rem; min-width: 70px; }
+  .threshold-row input { width: 65px; font-size: .75rem; }
+  .threshold-save, .export-btn { font-size: .7rem; padding: .4rem .8rem; }
+  .rssi-label { font-size: .7rem; min-width: 50px; }
+  .rssi-val { font-size: .7rem; }
+  .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
+}
 
-  .kpi-unit {
-    font-size: .75rem;
-    color: var(--text2);
-    margin-left: .2rem;
-  }
-
-  .kpi-sub {
-    font-size: .7rem;
-    color: var(--text3);
-    margin-top: .4rem;
-  }
-
-  /* ALERT BANNER */
-  .alert-bar {
-    display: none;
-    background: rgba(255,107,53,.1);
-    border: 1px solid rgba(255,107,53,.5);
-    border-radius: 8px;
-    padding: .75rem 1.25rem;
-    margin-bottom: 1.5rem;
-    font-size: .8rem;
-    color: var(--warn);
-    letter-spacing: .05em;
-    animation: flash 1s infinite;
-  }
-
-  .alert-bar.visible { display: flex; align-items: center; gap: .75rem; }
-
-  @keyframes flash {
-    0%,100% { opacity: 1; }
-    50%      { opacity: .6; }
-  }
-
-  /* CHART CARD */
-  .chart-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.25rem;
-    flex-wrap: wrap;
-    gap: .5rem;
-  }
-
-  .chart-title {
-    font-family: var(--font-disp);
-    font-weight: 600;
-    font-size: .95rem;
-    color: var(--text);
-  }
-
-  .chart-meta {
-    font-size: .65rem;
-    color: var(--text3);
-    letter-spacing: .08em;
-    text-transform: uppercase;
-  }
-
-  .chart-wrap {
-    position: relative;
-    height: 300px;
-  }
-
-  /* BOTTOM GRID */
-  .bottom-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-
-  /* ── TABLET (max 768px) ── */
-  @media (max-width: 768px) {
-    header {
-      padding: 1rem 1.25rem;
-      flex-wrap: wrap;
-      gap: .5rem;
-    }
-    .logo { font-size: 1rem; }
-    .last-update { display: none; }
-    main { padding: 1rem; }
-    .kpi-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: .75rem;
-    }
-    .kpi { padding: 1rem 1.1rem; }
-    .kpi-value { font-size: 2rem; }
-    .kpi-value.small { font-size: 1.4rem; }
-    .chart-wrap { height: 320px; }
-    .chart-header { flex-direction: column; align-items: flex-start; gap: .75rem; }
-    .chart-header > div:last-child { width: 100%; justify-content: space-between; }
-    .period-btn { padding: .4rem .9rem; font-size: .75rem; flex: 1; text-align: center; }
-    .bottom-grid { grid-template-columns: 1fr; }
-  }
-
-  /* ── MOBILE (max 480px) ── */
-  @media (max-width: 480px) {
-    header { padding: .75rem 1rem; }
-    .logo { font-size: .95rem; }
-    .status-pill { font-size: .6rem; padding: .3rem .6rem; }
-    main { padding: .75rem; }
-    .kpi-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: .5rem;
-      margin-bottom: 1rem;
-    }
-    .kpi { padding: .85rem 1rem; border-radius: 10px; }
-    .kpi-label { font-size: .6rem; margin-bottom: .3rem; }
-    .kpi-value { font-size: 1.75rem; }
-    .kpi-value.small { font-size: 1.3rem; }
-    .kpi-sub { font-size: .6rem; }
-    .chart-card { padding: 1rem; border-radius: 10px; }
-    .chart-wrap { height: 280px; }
-    .chart-title { font-size: .85rem; }
-    .chart-meta { font-size: .6rem; }
-    .period-btn { padding: .45rem .5rem; font-size: .7rem; }
-    .info-card { padding: 1rem; border-radius: 10px; }
-    .info-card-title { font-size: .6rem; }
-    .stats-table td { font-size: .72rem; padding: .45rem 0; }
-    .threshold-row label { font-size: .7rem; min-width: 70px; }
-    .threshold-row input { width: 65px; font-size: .75rem; }
-    .threshold-save { font-size: .7rem; padding: .4rem .8rem; }
-    .rssi-label { font-size: .7rem; min-width: 50px; }
-    .rssi-val { font-size: .7rem; }
-    .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
-  }
-
-  .info-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
-  }
-
-  .info-card-title {
-    font-size: .65rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--text3);
-    margin-bottom: 1rem;
-  }
-
-  /* RSSI bar */
-  .rssi-wrap { display: flex; flex-direction: column; gap: .5rem; }
-
-  .rssi-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-  }
-
-  .rssi-label { font-size: .75rem; color: var(--text2); min-width: 60px; }
-
-  .rssi-bar-bg {
-    flex: 1;
-    height: 6px;
-    background: var(--bg3);
-    border-radius: 99px;
-    overflow: hidden;
-  }
-
-  .rssi-bar-fill {
-    height: 100%;
-    border-radius: 99px;
-    background: linear-gradient(90deg, var(--accent2), var(--accent));
-    transition: width .8s ease;
-  }
-
-  .rssi-val { font-size: .75rem; color: var(--text2); min-width: 50px; text-align: right; }
-
-  /* STATS TABLE */
-  .stats-table { width: 100%; border-collapse: collapse; }
-  .stats-table tr { border-bottom: 1px solid var(--border); }
-  .stats-table tr:last-child { border-bottom: none; }
-  .stats-table td { padding: .55rem 0; font-size: .8rem; }
-  .stats-table td:first-child { color: var(--text3); }
-  .stats-table td:last-child  { color: var(--text); text-align: right; font-weight: 500; }
-
-  /* LOADING */
-  .loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 260px;
-    color: var(--text3);
-    font-size: .8rem;
-    letter-spacing: .1em;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .spinner {
-    width: 30px; height: 30px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin .8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .error-msg {
-    color: var(--warn);
-    font-size: .8rem;
-    text-align: center;
-    padding: 2rem;
-  }
-
-  /* THRESHOLDS */
-  .threshold-row {
-    display: flex;
-    gap: .5rem;
-    align-items: center;
-    margin-bottom: .5rem;
-  }
-  .threshold-row label { font-size: .75rem; color: var(--text3); min-width: 80px; }
-  .threshold-row input {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: .3rem .6rem;
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: .8rem;
-    width: 80px;
-    outline: none;
-  }
-  .threshold-row input:focus { border-color: var(--accent); }
-  .threshold-save {
-    margin-top: .75rem;
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    border-radius: 6px;
-    padding: .35rem .9rem;
-    font-family: var(--font-mono);
-    font-size: .75rem;
-    cursor: pointer;
-    transition: background .2s;
-  }
-  .threshold-save:hover { background: rgba(0,200,255,.1); }
-
-  /* PERIOD BUTTONS */
-  .period-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text2);
-    border-radius: 6px;
-    padding: .25rem .6rem;
-    font-family: var(--font-mono);
-    font-size: .7rem;
-    cursor: pointer;
-    transition: all .2s;
-  }
-  .period-btn:hover  { border-color: var(--accent); color: var(--accent); }
-  .period-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+/* ── PWA INSTALL BANNER ───────────────────────────────── */
+.pwa-banner {
+  background: rgba(0,200,255,.08);
+  border: 1px solid rgba(0,200,255,.3);
+  border-radius: 8px;
+  padding: .75rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: .8rem;
+  color: var(--accent);
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.pwa-banner.visible { display: flex; }
+.pwa-install-btn {
+  background: var(--accent); color: var(--bg);
+  border: none; border-radius: 6px;
+  padding: .4rem .9rem;
+  font-family: var(--font-mono); font-size: .75rem;
+  cursor: pointer; white-space: nowrap; font-weight: 500;
+}
+.pwa-dismiss { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 1rem; }
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo">CÁMARA<span>FRÍA</span></div>
-  <div style="display:flex;align-items:center;gap:1rem">
+  <div class="header-right">
     <span class="last-update" id="lastUpdate">—</span>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀ Claro</button>
     <div class="status-pill">
       <div class="dot" id="statusDot"></div>
       <span id="statusText">Conectando...</span>
@@ -505,9 +443,17 @@ function setPeriod(period, btn) {
 
 <main>
 
+  <!-- PWA INSTALL BANNER -->
+  <div class="pwa-banner" id="pwaBanner">
+    <span>📱 Instalá el monitor como app en tu celular</span>
+    <div style="display:flex;gap:.5rem">
+      <button class="pwa-install-btn" onclick="installPWA()">Instalar</button>
+      <button class="pwa-dismiss" onclick="document.getElementById('pwaBanner').classList.remove('visible')">✕</button>
+    </div>
+  </div>
 
   <!-- CONFIG BANNER -->
-  <div class="config-banner" id="configBanner">
+  <div class="config-banner hidden" id="configBanner">
     <span>⚙ Pegá la URL de tu Azure Function:</span>
     <input type="text" id="apiUrlInput" placeholder="https://TU-FUNCTION-APP.azurewebsites.net/api/getTemperatureHistory" />
     <button onclick="saveApiUrl()">Guardar</button>
@@ -527,17 +473,17 @@ function setPeriod(period, btn) {
       <div class="kpi-sub" id="subCurrent">Último dato recibido</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Mínima del día</div>
+      <div class="kpi-label">Mínima del período</div>
       <div class="kpi-value small" id="valMin">—<span class="kpi-unit">°C</span></div>
       <div class="kpi-sub" id="subMin">—</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Máxima del día</div>
+      <div class="kpi-label">Máxima del período</div>
       <div class="kpi-value small" id="valMax">—<span class="kpi-unit">°C</span></div>
       <div class="kpi-sub" id="subMax">—</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Promedio 24h</div>
+      <div class="kpi-label">Promedio del período</div>
       <div class="kpi-value small" id="valAvg">—<span class="kpi-unit">°C</span></div>
       <div class="kpi-sub" id="subAvg">—</div>
     </div>
@@ -547,15 +493,26 @@ function setPeriod(period, btn) {
   <div class="chart-card">
     <div class="chart-header">
       <div class="chart-title" id="chartTitle">Historial de temperatura — últimas 24h</div>
-      <div style="display:flex;align-items:center;gap:.75rem">
+      <div class="chart-controls">
         <div class="chart-meta" id="chartMeta">— registros</div>
         <div style="display:flex;gap:6px">
           <button class="period-btn active" onclick="setPeriod('24h', this)">24h</button>
           <button class="period-btn" onclick="setPeriod('7d', this)">7d</button>
           <button class="period-btn" onclick="setPeriod('30d', this)">30d</button>
         </div>
+        <button class="compare-toggle-btn" id="compareToggleBtn" onclick="toggleCompare()">⊕ Comparar</button>
       </div>
     </div>
+
+    <!-- COMPARE PANEL -->
+    <div class="compare-panel" id="comparePanel">
+      <div class="compare-checkboxes">
+        <label><input type="checkbox" id="cmpYesterday" onchange="loadData()"> Ayer</label>
+        <label><input type="checkbox" id="cmpLastWeek" onchange="loadData()"> Semana pasada</label>
+        <label><input type="checkbox" id="cmpLastMonth" onchange="loadData()"> Mes pasado (mismo día)</label>
+      </div>
+    </div>
+
     <div class="chart-wrap">
       <div class="loading" id="chartLoading">
         <div class="spinner"></div>
@@ -571,7 +528,7 @@ function setPeriod(period, btn) {
     <!-- RSSI -->
     <div class="info-card">
       <div class="info-card-title">Señal WiFi (RSSI)</div>
-      <div class="rssi-wrap" id="rssiWrap">
+      <div class="rssi-wrap">
         <div class="rssi-row">
           <span class="rssi-label">Actual</span>
           <div class="rssi-bar-bg"><div class="rssi-bar-fill" id="rssiBarCurrent" style="width:0%"></div></div>
@@ -597,7 +554,7 @@ function setPeriod(period, btn) {
     <div class="info-card">
       <div class="info-card-title">Estadísticas y alertas</div>
       <table class="stats-table">
-        <tr><td>Total registros 24h</td><td id="statCount">—</td></tr>
+        <tr><td>Total registros</td><td id="statCount">—</td></tr>
         <tr><td>Último mensaje</td><td id="statLast">—</td></tr>
         <tr><td>Rango normal</td><td id="statRange">—</td></tr>
         <tr><td>Tiempo fuera de rango</td><td id="statOut">—</td></tr>
@@ -614,6 +571,7 @@ function setPeriod(period, btn) {
           <span style="font-size:.7rem;color:var(--text3)">°C</span>
         </div>
         <button class="threshold-save" onclick="saveThresholds()">Guardar umbrales</button>
+        <button class="export-btn" onclick="exportCSV()">⬇ Exportar CSV</button>
       </div>
     </div>
 
@@ -624,22 +582,80 @@ function setPeriod(period, btn) {
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
+const API_BASE        = 'https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api';
 const STORAGE_KEY_URL    = 'fridgeApiUrl';
 const STORAGE_KEY_THRESH = 'fridgeThresholds';
-const REFRESH_MS         = 60000; // refresca cada 60s
+const STORAGE_KEY_THEME  = 'fridgeTheme';
+const REFRESH_MS         = 60000;
 
-let apiUrl = localStorage.getItem(STORAGE_KEY_URL) || 'https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getTemperatureHistory';
-let thresholds = JSON.parse(localStorage.getItem(STORAGE_KEY_THRESH) || '{"high":-10,"low":-25}');
-let chart      = null;
+let apiUrl        = localStorage.getItem(STORAGE_KEY_URL) || `${API_BASE}/getTemperatureHistory`;
+let thresholds    = JSON.parse(localStorage.getItem(STORAGE_KEY_THRESH) || '{"high":-10,"low":-25}');
+let chart         = null;
 let currentPeriod = '24h';
+let lastRawData   = [];
+let deferredPrompt = null;
+
+// ─────────────────────────────────────────────
+// PWA
+// ─────────────────────────────────────────────
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('pwaBanner').classList.add('visible');
+});
+
+function installPWA() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+        deferredPrompt = null;
+        document.getElementById('pwaBanner').classList.remove('visible');
+    });
+}
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ─────────────────────────────────────────────
+// THEME
+// ─────────────────────────────────────────────
+function toggleTheme() {
+    const html    = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    const next    = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem(STORAGE_KEY_THEME, next);
+    document.getElementById('themeBtn').textContent = next === 'dark' ? '☀ Claro' : '☾ Oscuro';
+    if (chart) {
+        updateChartColors();
+        chart.update();
+    }
+}
+
+function updateChartColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const tickColor = isDark ? '#3a6080' : '#7a9ab8';
+    const gridColor = isDark ? 'rgba(26,48,80,0.5)' : 'rgba(150,180,210,0.4)';
+    chart.options.scales.x.ticks.color = tickColor;
+    chart.options.scales.y.ticks.color = tickColor;
+    chart.options.scales.x.grid.color  = gridColor;
+    chart.options.scales.y.grid.color  = gridColor;
+}
 
 // ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    // Cargar umbrales desde Device Twin al arrancar
+    // Aplicar tema guardado
+    const savedTheme = localStorage.getItem(STORAGE_KEY_THEME) || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').textContent = savedTheme === 'dark' ? '☀ Claro' : '☾ Oscuro';
+
+    // Cargar umbrales desde Device Twin
     try {
-        const res = await fetch('https://iothubtotable-a0f6cxfxfreadwde.westus3-01.azurewebsites.net/api/getThresholds');
+        const res = await fetch(`${API_BASE}/getThresholds`);
         if (res.ok) {
             const data = await res.json();
             thresholds.high = data.alertTempHigh;
@@ -650,11 +666,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('Error cargando umbrales:', err.message);
     }
 
-    // Actualizar inputs con valores del twin
     document.getElementById('threshHigh').value = thresholds.high;
     document.getElementById('threshLow').value  = thresholds.low;
 
-    // Arrancar dashboard
     document.getElementById('configBanner').classList.add('hidden');
     if (apiUrl) {
         loadData();
@@ -664,111 +678,149 @@ document.addEventListener('DOMContentLoaded', async () => {
             '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
         setStatus('warn', 'Sin configurar');
     }
-
-    // Verificar valores finales
-    setTimeout(() => {
-        console.log('Thresholds:', thresholds);
-    }, 500);
-});;
+});
 
 function saveApiUrl() {
-  const val = document.getElementById('apiUrlInput').value.trim();
-  if (!val) return;
-  apiUrl = val;
-  localStorage.setItem(STORAGE_KEY_URL, apiUrl);
-  document.getElementById('configBanner').classList.add('hidden');
-  loadData();
-  setInterval(loadData, REFRESH_MS);
+    const val = document.getElementById('apiUrlInput').value.trim();
+    if (!val) return;
+    apiUrl = val;
+    localStorage.setItem(STORAGE_KEY_URL, apiUrl);
+    document.getElementById('configBanner').classList.add('hidden');
+    loadData();
+    setInterval(loadData, REFRESH_MS);
 }
 
-function saveThresholds() {
-  thresholds.high = parseFloat(document.getElementById('threshHigh').value);
-  thresholds.low  = parseFloat(document.getElementById('threshLow').value);
-  localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
-  document.getElementById('statRange').textContent =
-    `${thresholds.low}°C — ${thresholds.high}°C`;
-  if (chart) evaluateAlerts(chart.data.datasets[0].data.slice(-1)[0]?.y ?? null);
+async function saveThresholds() {
+    thresholds.high = parseFloat(document.getElementById('threshHigh').value);
+    thresholds.low  = parseFloat(document.getElementById('threshLow').value);
+    localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+    try {
+        const res = await fetch(`${API_BASE}/updateThresholds`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alertTempHigh: thresholds.high, alertTempLow: thresholds.low })
+        });
+        if (res.ok) {
+            document.getElementById('statRange').textContent = `${thresholds.low}°C — ${thresholds.high}°C`;
+            const currentTemp = parseFloat(document.getElementById('valCurrent').textContent);
+            if (!isNaN(currentTemp)) evaluateAlerts(currentTemp);
+            alert(`✅ Umbrales guardados: ${thresholds.low}°C — ${thresholds.high}°C`);
+        } else {
+            alert('❌ Error al guardar en Azure');
+        }
+    } catch (err) {
+        alert('❌ Error de conexión: ' + err.message);
+    }
+}
+
+// ─────────────────────────────────────────────
+// COMPARE
+// ─────────────────────────────────────────────
+function toggleCompare() {
+    const panel = document.getElementById('comparePanel');
+    const btn   = document.getElementById('compareToggleBtn');
+    const visible = panel.classList.toggle('visible');
+    btn.classList.toggle('active', visible);
+    if (!visible) {
+        document.getElementById('cmpYesterday').checked  = false;
+        document.getElementById('cmpLastWeek').checked   = false;
+        document.getElementById('cmpLastMonth').checked  = false;
+        loadData();
+    }
+}
+
+async function fetchCompareData(offsetDays) {
+    const url = `${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}`;
+    try {
+        const res  = await fetch(url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    } catch { return []; }
 }
 
 // ─────────────────────────────────────────────
 // DATA
 // ─────────────────────────────────────────────
 async function loadData() {
-  try {
-    const res = await fetch(`${apiUrl}?period=${currentPeriod}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    try {
+        const res = await fetch(`${apiUrl}?period=${currentPeriod}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
-    if (!Array.isArray(data) || data.length === 0) {
-      showError('Sin datos en el período seleccionado.');
-      setStatus('warn', 'Sin datos');
-      return;
+        if (!Array.isArray(data) || data.length === 0) {
+            showError('Sin datos en el período seleccionado.');
+            setStatus('warn', 'Sin datos');
+            return;
+        }
+
+        data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        const deduped = [];
+        let lastMinute = null;
+        for (const d of data) {
+            const minute = new Date(d.timestamp).toISOString().slice(0, 16);
+            if (minute !== lastMinute) { deduped.push(d); lastMinute = minute; }
+        }
+
+        lastRawData = deduped;
+        const finalData = fillGaps(deduped, currentPeriod);
+
+        // Fetch compare data if checkboxes are active
+        const cmpDatasets = [];
+        if (document.getElementById('cmpYesterday')?.checked) {
+            const d = await fetchCompareData(1);
+            if (d.length) {
+                const filled = fillGaps(d.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)), currentPeriod);
+                cmpDatasets.push({ label: 'Ayer', data: filled.map(x => x.temperature), color: 'rgba(255,200,0,0.7)' });
+            }
+        }
+        if (document.getElementById('cmpLastWeek')?.checked) {
+            const d = await fetchCompareData(7);
+            if (d.length) {
+                const filled = fillGaps(d.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)), currentPeriod);
+                cmpDatasets.push({ label: 'Semana pasada', data: filled.map(x => x.temperature), color: 'rgba(167,139,250,0.7)' });
+            }
+        }
+        if (document.getElementById('cmpLastMonth')?.checked) {
+            const d = await fetchCompareData(30);
+            if (d.length) {
+                const filled = fillGaps(d.sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp)), currentPeriod);
+                cmpDatasets.push({ label: 'Mes pasado', data: filled.map(x => x.temperature), color: 'rgba(0,229,160,0.7)' });
+            }
+        }
+
+        renderKPIs(deduped);
+        renderChart(finalData, cmpDatasets);
+        renderRSSI(deduped);
+        renderStats(deduped);
+        setStatus('ok', 'En línea');
+        document.getElementById('lastUpdate').textContent =
+            'Actualizado ' + new Date().toLocaleTimeString('es-AR');
+
+    } catch (err) {
+        console.error(err);
+        showError(`Error al cargar datos: ${err.message}`);
+        setStatus('warn', 'Error de conexión');
     }
-
-    // Ordenar por timestamp ascendente
-    data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    // Deduplicar por minuto
-    const deduped = [];
-    let lastMinute = null;
-    for (const d of data) {
-      const minute = new Date(d.timestamp).toISOString().slice(0, 16);
-      if (minute !== lastMinute) {
-        deduped.push(d);
-        lastMinute = minute;
-      }
-    }
-
-    // Rellenar gaps para eje temporal completo
-    const finalData = fillGaps(deduped, currentPeriod);
-
-    renderKPIs(deduped);        // KPIs usan solo datos reales
-    renderChart(finalData);     // Chart usa datos con gaps rellenos
-    renderRSSI(deduped);
-    renderStats(deduped);
-    setStatus('ok', 'En línea');
-    document.getElementById('lastUpdate').textContent =
-      'Actualizado ' + new Date().toLocaleTimeString('es-AR');
-
-  } catch (err) {
-    console.error(err);
-    showError(`Error al cargar datos: ${err.message}`);
-    setStatus('warn', 'Error de conexión');
-  }
 }
 
 function fillGaps(data, period) {
     const now    = new Date();
     const msBack = { '24h': 24*60*60*1000, '7d': 7*24*60*60*1000, '30d': 30*24*60*60*1000 };
     const start  = new Date(now.getTime() - (msBack[period] || msBack['24h']));
-
-    // Intervalo entre puntos según período
     const intervalMin = period === '24h' ? 5 : period === '7d' ? 60 : 360;
     const intervalMs  = intervalMin * 60 * 1000;
-
-    // Mapa de datos reales por slot de tiempo
     const dataMap = new Map();
     for (const d of data) {
         const slot = Math.round(new Date(d.timestamp).getTime() / intervalMs) * intervalMs;
         if (!dataMap.has(slot)) dataMap.set(slot, d);
     }
-
-    // Generar todos los slots del período
     const result = [];
     let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
     while (cursor <= now.getTime()) {
         const existing = dataMap.get(cursor);
-        if (existing) {
-            result.push(existing);
-        } else {
-            result.push({
-                timestamp:   new Date(cursor).toISOString(),
-                temperature: null,
-                minTemp:     null,
-                maxTemp:     null,
-                rssi:        null
-            });
-        }
+        result.push(existing || { timestamp: new Date(cursor).toISOString(), temperature: null, minTemp: null, maxTemp: null, rssi: null });
         cursor += intervalMs;
     }
     return result;
@@ -778,231 +830,237 @@ function fillGaps(data, period) {
 // KPIs
 // ─────────────────────────────────────────────
 function renderKPIs(data) {
-  const temps  = data.map(d => d.temperature);
-  const latest = data[data.length - 1];
-  const cur    = latest.temperature;
-  const min    = Math.min(...temps);
-  const max    = Math.max(...temps);
-  const avg    = temps.reduce((a,b) => a+b, 0) / temps.length;
-
-  const fmt = v => v.toFixed(1);
-
-  document.getElementById('valCurrent').innerHTML = `${fmt(cur)}<span class="kpi-unit">°C</span>`;
-  document.getElementById('valMin').innerHTML     = `${fmt(min)}<span class="kpi-unit">°C</span>`;
-  document.getElementById('valMax').innerHTML     = `${fmt(max)}<span class="kpi-unit">°C</span>`;
-  document.getElementById('valAvg').innerHTML     = `${fmt(avg)}<span class="kpi-unit">°C</span>`;
-
-  document.getElementById('subCurrent').textContent = formatTime(latest.timestamp);
-  const periodLabels = { '24h': 'Últimas 24h', '7d': 'Últimos 7 días', '30d': 'Últimos 30 días' };
-  document.getElementById('subMin').textContent     = periodLabels[currentPeriod] || 'Últimas 24h';
-  document.getElementById('subMax').textContent     = periodLabels[currentPeriod] || 'Últimas 24h';
-  document.getElementById('subAvg').textContent     = `${data.length} registros`;
-
-  // color warnings
-  const curEl = document.getElementById('valCurrent');
-  curEl.className = 'kpi-value';
-  if (cur > thresholds.high || cur < thresholds.low) curEl.classList.add('warn');
-
-  evaluateAlerts(cur);
+    const temps  = data.map(d => d.temperature).filter(v => v !== null);
+    if (!temps.length) return;
+    const latest = data[data.length - 1];
+    const cur    = latest.temperature;
+    const min    = Math.min(...temps);
+    const max    = Math.max(...temps);
+    const avg    = temps.reduce((a,b) => a+b, 0) / temps.length;
+    const fmt    = v => v.toFixed(1);
+    document.getElementById('valCurrent').innerHTML = `${fmt(cur)}<span class="kpi-unit">°C</span>`;
+    document.getElementById('valMin').innerHTML     = `${fmt(min)}<span class="kpi-unit">°C</span>`;
+    document.getElementById('valMax').innerHTML     = `${fmt(max)}<span class="kpi-unit">°C</span>`;
+    document.getElementById('valAvg').innerHTML     = `${fmt(avg)}<span class="kpi-unit">°C</span>`;
+    document.getElementById('subCurrent').textContent = formatTime(latest.timestamp);
+    const periodLabels = { '24h': 'Últimas 24h', '7d': 'Últimos 7 días', '30d': 'Últimos 30 días' };
+    document.getElementById('subMin').textContent = periodLabels[currentPeriod] || 'Últimas 24h';
+    document.getElementById('subMax').textContent = periodLabels[currentPeriod] || 'Últimas 24h';
+    document.getElementById('subAvg').textContent = `${temps.length} registros`;
+    const curEl = document.getElementById('valCurrent');
+    curEl.className = 'kpi-value';
+    if (cur > thresholds.high || cur < thresholds.low) curEl.classList.add('warn');
+    evaluateAlerts(cur);
 }
 
 function evaluateAlerts(cur) {
-  if (cur === null) return;
-  const bar = document.getElementById('alertBar');
-  const msg = document.getElementById('alertMsg');
-  if (cur > thresholds.high) {
-    bar.classList.add('visible');
-    msg.textContent = `⚠ Temperatura ALTA: ${cur.toFixed(1)}°C (límite: ${thresholds.high}°C)`;
-    document.getElementById('statusDot').classList.add('warn');
-  } else if (cur < thresholds.low) {
-    bar.classList.add('visible');
-    msg.textContent = `⚠ Temperatura BAJA: ${cur.toFixed(1)}°C (límite: ${thresholds.low}°C)`;
-    document.getElementById('statusDot').classList.add('warn');
-  } else {
-    bar.classList.remove('visible');
-    document.getElementById('statusDot').classList.remove('warn');
-  }
+    if (cur === null) return;
+    const bar = document.getElementById('alertBar');
+    const msg = document.getElementById('alertMsg');
+    if (cur > thresholds.high) {
+        bar.classList.add('visible');
+        msg.textContent = `⚠ Temperatura ALTA: ${cur.toFixed(1)}°C (límite: ${thresholds.high}°C)`;
+        document.getElementById('statusDot').classList.add('warn');
+    } else if (cur < thresholds.low) {
+        bar.classList.add('visible');
+        msg.textContent = `⚠ Temperatura BAJA: ${cur.toFixed(1)}°C (límite: ${thresholds.low}°C)`;
+        document.getElementById('statusDot').classList.add('warn');
+    } else {
+        bar.classList.remove('visible');
+        document.getElementById('statusDot').classList.remove('warn');
+    }
 }
 
 // ─────────────────────────────────────────────
 // CHART
 // ─────────────────────────────────────────────
-function renderChart(data) {
-  document.getElementById('chartLoading').style.display = 'none';
-  const canvas = document.getElementById('tempChart');
-  canvas.style.display = 'block';
+function renderChart(data, cmpDatasets = []) {
+    document.getElementById('chartLoading').style.display = 'none';
+    const canvas = document.getElementById('tempChart');
+    canvas.style.display = 'block';
+    document.getElementById('chartMeta').textContent = data.filter(d => d.temperature !== null).length + ' registros';
 
-  document.getElementById('chartMeta').textContent = data.length + ' registros';
+    const isDark     = document.documentElement.getAttribute('data-theme') === 'dark';
+    const tickColor  = isDark ? '#3a6080' : '#7a9ab8';
+    const gridColor  = isDark ? 'rgba(26,48,80,0.5)' : 'rgba(150,180,210,0.4)';
+    const tooltipBg  = isDark ? '#091628' : '#ffffff';
+    const tooltipBdr = isDark ? '#1a3050' : '#c8d8e8';
 
-  // String labels — sin adaptador de fechas
-  const labels   = data.map(d => formatTime(d.timestamp));
-  const values   = data.map(d => d.temperature);
-  const highLine = data.map(() => thresholds.high);
-  const lowLine  = data.map(() => thresholds.low);
+    const labels   = data.map(d => formatTime(d.timestamp));
+    const values   = data.map(d => d.temperature);
+    const highLine = data.map(() => thresholds.high);
+    const lowLine  = data.map(() => thresholds.low);
 
-  if (chart) { chart.destroy(); chart = null; }
+    if (chart) { chart.destroy(); chart = null; }
 
-  chart = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
+    const datasets = [
         {
-          label: 'Temperatura',
-          data: values,
-          borderColor: '#00c8ff',
-          backgroundColor: 'rgba(0,200,255,0.06)',
-          borderWidth: 2,
-          pointRadius: data.length > 100 ? 0 : 3,
-          pointHoverRadius: 5,
-          tension: 0.3,
-          fill: true,
-          spanGaps: false
+            label: 'Temperatura',
+            data: values,
+            borderColor: '#00c8ff',
+            backgroundColor: 'rgba(0,200,255,0.06)',
+            borderWidth: 2,
+            pointRadius: data.length > 200 ? 0 : 3,
+            pointHoverRadius: 5,
+            tension: 0.3,
+            fill: true,
+            spanGaps: false
+        },
+        ...cmpDatasets.map(c => ({
+            label: c.label,
+            data: c.data,
+            borderColor: c.color,
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.3,
+            fill: false,
+            spanGaps: false,
+            borderDash: [4, 3]
+        })),
+        {
+            label: 'Límite alto',
+            data: highLine,
+            borderColor: 'rgba(255,107,53,0.6)',
+            borderWidth: 1,
+            borderDash: [4,4],
+            pointRadius: 0,
+            fill: false
         },
         {
-          label: 'Limite alto',
-          data: highLine,
-          borderColor: 'rgba(255,107,53,0.6)',
-          borderWidth: 1,
-          borderDash: [4,4],
-          pointRadius: 0,
-          fill: false
-        },
-        {
-          label: 'Limite bajo',
-          data: lowLine,
-          borderColor: 'rgba(167,139,250,0.6)',
-          borderWidth: 1,
-          borderDash: [4,4],
-          pointRadius: 0,
-          fill: false
+            label: 'Límite bajo',
+            data: lowLine,
+            borderColor: 'rgba(167,139,250,0.6)',
+            borderWidth: 1,
+            borderDash: [4,4],
+            pointRadius: 0,
+            fill: false
         }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          labels: {
-            color: '#6b9ab8',
-            font: { family: 'DM Mono', size: 11 },
-            boxWidth: 12
-          }
-        },
-        tooltip: {
-          backgroundColor: '#091628',
-          borderColor: '#1a3050',
-          borderWidth: 1,
-          titleColor: '#6b9ab8',
-          bodyColor: '#e8f4ff',
-          callbacks: {
-            label: function(item) {
-              return ' ' + item.dataset.label + ': ' + Number(item.raw).toFixed(2) + 'C';
+    ];
+
+    chart = new Chart(canvas, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    labels: { color: tickColor, font: { family: 'DM Mono', size: 11 }, boxWidth: 12 }
+                },
+                tooltip: {
+                    backgroundColor: tooltipBg,
+                    borderColor: tooltipBdr,
+                    borderWidth: 1,
+                    titleColor: tickColor,
+                    bodyColor: isDark ? '#e8f4ff' : '#0a1a2e',
+                    callbacks: {
+                        label: item => ` ${item.dataset.label}: ${item.raw !== null ? Number(item.raw).toFixed(2) + '°C' : '—'}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: tickColor, font: { family: 'DM Mono', size: 10 }, maxTicksLimit: 8, maxRotation: 0 },
+                    grid: { color: gridColor }
+                },
+                y: {
+                    ticks: { color: tickColor, font: { family: 'DM Mono', size: 10 }, callback: v => `${v}°C` },
+                    grid: { color: gridColor }
+                }
             }
-          }
         }
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: '#3a6080',
-            font: { family: 'DM Mono', size: 10 },
-            maxTicksLimit: window.innerWidth < 480 ? 4 : 8,
-            maxRotation: 0
-          },
-          grid: { color: 'rgba(26,48,80,0.5)' }
-        },
-        y: {
-          ticks: {
-            color: '#3a6080',
-            font: { family: 'DM Mono', size: 10 },
-            callback: function(v) { return v + 'C'; }
-          },
-          grid: { color: 'rgba(26,48,80,0.5)' }
-        }
-      }
-    }
-  });
+    });
 }
 
 // ─────────────────────────────────────────────
 // RSSI
 // ─────────────────────────────────────────────
 function renderRSSI(data) {
-  const rssiFilt = data.map(d => d.rssi).filter(v => v != null && v !== 0);
-  if (rssiFilt.length === 0) return;
-
-  const latest  = rssiFilt[rssiFilt.length - 1];
-  const avg     = rssiFilt.reduce((a,b) => a+b, 0) / rssiFilt.length;
-  const minRssi = Math.min(...rssiFilt);
-
-  const toPercent = v => Math.max(0, Math.min(100, ((v + 100) / 70) * 100));
-
-  document.getElementById('rssiValCurrent').textContent = `${latest} dBm`;
-  document.getElementById('rssiValAvg').textContent     = `${avg.toFixed(0)} dBm`;
-  document.getElementById('rssiValMin').textContent     = `${minRssi} dBm`;
-
-  document.getElementById('rssiBarCurrent').style.width = toPercent(latest) + '%';
-  document.getElementById('rssiBarAvg').style.width     = toPercent(avg) + '%';
-  document.getElementById('rssiBarMin').style.width     = toPercent(minRssi) + '%';
+    const rssiFilt = data.map(d => d.rssi).filter(v => v != null && v !== 0);
+    if (!rssiFilt.length) return;
+    const latest  = rssiFilt[rssiFilt.length - 1];
+    const avg     = rssiFilt.reduce((a,b) => a+b, 0) / rssiFilt.length;
+    const minRssi = Math.min(...rssiFilt);
+    const toPercent = v => Math.max(0, Math.min(100, ((v + 100) / 70) * 100));
+    document.getElementById('rssiValCurrent').textContent = `${latest} dBm`;
+    document.getElementById('rssiValAvg').textContent     = `${avg.toFixed(0)} dBm`;
+    document.getElementById('rssiValMin').textContent     = `${minRssi} dBm`;
+    document.getElementById('rssiBarCurrent').style.width = toPercent(latest) + '%';
+    document.getElementById('rssiBarAvg').style.width     = toPercent(avg) + '%';
+    document.getElementById('rssiBarMin').style.width     = toPercent(minRssi) + '%';
 }
 
 // ─────────────────────────────────────────────
 // STATS
 // ─────────────────────────────────────────────
 function renderStats(data) {
-  const temps   = data.map(d => d.temperature);
-  const outOfRange = temps.filter(t => t > thresholds.high || t < thresholds.low).length;
-  const pct     = ((outOfRange / temps.length) * 100).toFixed(1);
-  const latest  = data[data.length - 1];
+    const temps      = data.map(d => d.temperature).filter(v => v !== null);
+    const outOfRange = temps.filter(t => t > thresholds.high || t < thresholds.low).length;
+    const pct        = ((outOfRange / temps.length) * 100).toFixed(1);
+    const latest     = data[data.length - 1];
+    const periodLabel = { '24h': '24h', '7d': '7 días', '30d': '30 días' };
+    document.getElementById('statCount').textContent = temps.length + ' (' + (periodLabel[currentPeriod] || '24h') + ')';
+    document.getElementById('statLast').textContent  = formatTime(latest.timestamp);
+    document.getElementById('statRange').textContent = `${thresholds.low}°C — ${thresholds.high}°C`;
+    document.getElementById('statOut').textContent   = `${outOfRange} registros (${pct}%)`;
+}
 
-  document.getElementById('statCount').textContent = data.length;
-  document.getElementById('statLast').textContent  = formatTime(latest.timestamp);
-  document.getElementById('statRange').textContent = `${thresholds.low}°C — ${thresholds.high}°C`;
-  document.getElementById('statOut').textContent   = `${outOfRange} registros (${pct}%)`;
+// ─────────────────────────────────────────────
+// EXPORT CSV
+// ─────────────────────────────────────────────
+function exportCSV() {
+    if (!lastRawData.length) { alert('No hay datos para exportar'); return; }
+    const headers = ['timestamp', 'temperature', 'minTemp', 'maxTemp', 'rssi'];
+    const rows    = lastRawData.map(d =>
+        headers.map(h => d[h] !== null && d[h] !== undefined ? d[h] : '').join(',')
+    );
+    const csv     = [headers.join(','), ...rows].join('\n');
+    const blob    = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url     = URL.createObjectURL(blob);
+    const a       = document.createElement('a');
+    const period  = { '24h': '24h', '7d': '7dias', '30d': '30dias' };
+    a.href        = url;
+    a.download    = `camara-fria-${period[currentPeriod]}-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────
+// PERIOD SELECTOR
+// ─────────────────────────────────────────────
+function setPeriod(period, btn) {
+    currentPeriod = period;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
+    document.getElementById('chartTitle').textContent = 'Historial de temperatura — ' + titles[period];
+    document.getElementById('chartLoading').style.display = 'flex';
+    document.getElementById('chartLoading').innerHTML = '<div class="spinner"></div><span>Cargando datos...</span>';
+    document.getElementById('tempChart').style.display = 'none';
+    loadData();
 }
 
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
 function setStatus(type, text) {
-  const dot  = document.getElementById('statusDot');
-  const span = document.getElementById('statusText');
-  dot.className  = type === 'warn' ? 'dot warn' : 'dot';
-  span.textContent = text;
+    const dot  = document.getElementById('statusDot');
+    const span = document.getElementById('statusText');
+    dot.className    = type === 'warn' ? 'dot warn' : 'dot';
+    span.textContent = text;
 }
 
 function showError(msg) {
-  document.getElementById('chartLoading').style.display = 'flex';
-  document.getElementById('chartLoading').innerHTML =
-    `<span class="error-msg">${msg}</span>`;
-  document.getElementById('tempChart').style.display = 'none';
+    document.getElementById('chartLoading').style.display = 'flex';
+    document.getElementById('chartLoading').innerHTML = `<span class="error-msg">${msg}</span>`;
+    document.getElementById('tempChart').style.display = 'none';
 }
 
 function formatTime(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleString('es-AR', {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
-}
-
-
-
-function setPeriod(period, btn) {
-    currentPeriod = period;
-    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const titles = { '24h': 'últimas 24h', '7d': 'últimos 7 días', '30d': 'últimos 30 días' };
-    document.getElementById('chartTitle').textContent =
-        'Historial de temperatura — ' + titles[period];
-    document.getElementById('chartLoading').style.display = 'flex';
-    document.getElementById('chartLoading').innerHTML =
-        '<div class="spinner"></div><span>Cargando datos...</span>';
-    document.getElementById('tempChart').style.display = 'none';
-    loadData();
+    if (!ts) return '—';
+    return new Date(ts).toLocaleString('es-AR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 </script>
 </body>

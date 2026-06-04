@@ -1,0 +1,24 @@
+{
+  "name": "Cámara Fría Monitor",
+  "short_name": "CámaraFría",
+  "description": "Monitor de temperatura para cámara frigorífica",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050e1a",
+  "theme_color": "#050e1a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
