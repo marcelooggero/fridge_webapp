@@ -749,13 +749,20 @@ const COMPARE_COLORS = [
 ];
 
 async function toggleCompare() {
+    console.log('toggleCompare called');
     const panel = document.getElementById('comparePanel');
     const btn   = document.getElementById('compareToggleBtn');
+    console.log('panel:', panel);
+    console.log('panel visible before:', panel.classList.contains('visible'));
+    
     const visible = panel.classList.toggle('visible');
     btn.classList.toggle('active', visible);
+    console.log('panel visible after:', visible);
 
     if (visible && availableDays.length === 0) {
+        console.log('Loading available days...');
         await loadAvailableDays();
+        console.log('Available days loaded:', availableDays);
     }
     if (!visible) {
         selectedCompareDays = [];
