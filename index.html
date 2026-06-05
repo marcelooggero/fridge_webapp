@@ -489,30 +489,41 @@ async function fetchCompareData(targetDay) {
 
         // Compare datasets
         const cmpDatasets = [];
-        for (let i = 0; i < selectedCompareDays.length; i++) {
+         for (let i = 0; i < selectedCompareDays.length; i++) {
           const day = selectedCompareDays[i];
           const d   = await fetchCompareData(day);
           if (d.length) {
             const sorted = d.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-          // En loadData, reemplazá el bloque del shift:
-          const todayMidnight  = new Date(); todayMidnight.setHours(0,0,0,0);
-          const targetMidnight = new Date(targetDay + "T00:00:00");
-          const offsetDays     = Math.round((todayMidnight.getTime() - targetMidnight.getTime()) / (24*60*60*1000));
-          const shiftMs        = offsetDays * 24 * 60 * 60 * 1000;
-          console.log('period:', currentPeriod);
-          console.log('shiftMs en horas:', shiftMs / 3600000);
-          console.log('shifted[0]:', shifted[0]?.timestamp);
-          console.log('shifted last:', shifted[shifted.length-1]?.timestamp);
-          console.log('finalData[0]:', finalData[0]?.timestamp);
-          console.log('finalData last:', finalData[finalData.length-1]?.timestamp);
-          const shifted = sorted.map(r => ({
+
+            const todayMidnight  = new Date(); todayMidnight.setHours(0,0,0,0);
+            const targetMidnight = new Date(day + "T00:00:00");  // ← day, no targetDay
+            const offsetDays     = Math.round((todayMidnight.getTime() - targetMidnight.getTime()) / (24*60*60*1000));
+            const shiftMs        = offsetDays * 24 * 60 * 60 * 1000;
+
+            console.log('=== COMPARE DEBUG ===');
+            console.log('period:', currentPeriod);
+            console.log('day:', day, 'offsetDays:', offsetDays);
+            console.log('shiftMs en días:', shiftMs / (24*60*60*1000));
+            console.log('sorted[0]:', sorted[0]?.timestamp);
+            console.log('sorted last:', sorted[sorted.length-1]?.timestamp);
+
+            const shifted = sorted.map(r => ({
               ...r,
               timestamp: new Date(new Date(r.timestamp).getTime() + shiftMs).toISOString()
-          }));
+            }));
+
+            console.log('shifted[0]:', shifted[0]?.timestamp);
+            console.log('shifted last:', shifted[shifted.length-1]?.timestamp);
+            console.log('finalData[0]:', finalData[0]?.timestamp);
+            console.log('finalData last:', finalData[finalData.length-1]?.timestamp);
+
             const filled = fillGaps(shifted, currentPeriod);
+            console.log('filled con datos:', filled.filter(x => x.temperature !== null).length, 'de', filled.length);
+
             const label  = new Date(day + "T12:00:00").toLocaleString("es-AR", {day:"numeric", month:"short"});
             cmpDatasets.push({ label, data: filled.map(x => x.temperature), color: COMPARE_COLORS[i % COMPARE_COLORS.length] });
           }
+        }
         }
 
         // Para 30d mostrar bandas min/max
