@@ -393,7 +393,7 @@
       const wrap  = document.getElementById("calendarWrap");
       const today = new Date().toISOString().slice(0, 10);
       wrap.innerHTML = "";
-      const days  = [...availableDays].reverse().filter(d => d !== today);
+      const days  = [...availableDays].filter(d => d !== today);
       if (days.length === 0) {
         wrap.innerHTML = '<span style="font-size:.75rem;color:var(--text3)">No hay datos históricos disponibles aún.</span>';
         return;
