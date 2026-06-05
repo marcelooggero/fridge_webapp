@@ -422,17 +422,35 @@
       loadData();
     }
 
-    async function fetchCompareData(targetDay) {
-      const today  = new Date(); today.setHours(0,0,0,0);
-      const target = new Date(targetDay + "T00:00:00");
-      const offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
-      try {
+async function fetchCompareData(targetDay) {
+    const today  = new Date(); today.setHours(0,0,0,0);
+    const target = new Date(targetDay + "T00:00:00");
+    
+    // offsetDays = días entre el inicio del período target y el inicio del período actual
+    // Para 24h: offset = días entre targetDay y hoy
+    // Para 7d/30d: offset = días entre el lunes/día1 de esa semana/mes y el actual
+    let offsetDays;
+    
+    if (currentPeriod === "24h") {
+        // Comparar ese día exacto
+        offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
+    } else if (currentPeriod === "7d") {
+        // Buscar los 7 días que terminan en targetDay
+        // El período actual es los últimos 7 días terminando hoy
+        // El período comparado es los 7 días terminando en targetDay
+        offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
+    } else {
+        // 30d: igual lógica
+        offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
+    }
+
+    try {
         const res  = await fetch(`${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}`);
         if (!res.ok) return [];
         const data = await res.json();
         return Array.isArray(data) ? data : [];
-      } catch { return []; }
-    }
+    } catch { return []; }
+}
 
     // ── DATA ──────────────────────────────────────────────────
     async function loadData() {
@@ -476,13 +494,21 @@
           const d   = await fetchCompareData(day);
           if (d.length) {
             const sorted = d.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-            const todayMidnight  = new Date(); todayMidnight.setHours(0,0,0,0);
-            const targetMidnight = new Date(day + "T00:00:00");
-            const shiftMs = todayMidnight.getTime() - targetMidnight.getTime();
-            const shifted = sorted.map(r => ({
+          // En loadData, reemplazá el bloque del shift:
+          const todayMidnight  = new Date(); todayMidnight.setHours(0,0,0,0);
+          const targetMidnight = new Date(targetDay + "T00:00:00");
+          const offsetDays     = Math.round((todayMidnight.getTime() - targetMidnight.getTime()) / (24*60*60*1000));
+          const shiftMs        = offsetDays * 24 * 60 * 60 * 1000;
+          console.log('period:', currentPeriod);
+          console.log('shiftMs en horas:', shiftMs / 3600000);
+          console.log('shifted[0]:', shifted[0]?.timestamp);
+          console.log('shifted last:', shifted[shifted.length-1]?.timestamp);
+          console.log('finalData[0]:', finalData[0]?.timestamp);
+          console.log('finalData last:', finalData[finalData.length-1]?.timestamp);
+          const shifted = sorted.map(r => ({
               ...r,
               timestamp: new Date(new Date(r.timestamp).getTime() + shiftMs).toISOString()
-            }));
+          }));
             const filled = fillGaps(shifted, currentPeriod);
             const label  = new Date(day + "T12:00:00").toLocaleString("es-AR", {day:"numeric", month:"short"});
             cmpDatasets.push({ label, data: filled.map(x => x.temperature), color: COMPARE_COLORS[i % COMPARE_COLORS.length] });
