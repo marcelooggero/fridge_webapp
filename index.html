@@ -523,7 +523,7 @@ async function fetchCompareData(targetDay) {
             const label  = new Date(day + "T12:00:00").toLocaleString("es-AR", {day:"numeric", month:"short"});
             cmpDatasets.push({ label, data: filled.map(x => x.temperature), color: COMPARE_COLORS[i % COMPARE_COLORS.length] });
           }
-        }
+        
         }
 
         // Para 30d mostrar bandas min/max
