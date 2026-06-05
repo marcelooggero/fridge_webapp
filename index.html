@@ -336,6 +336,8 @@
         document.getElementById("chartLoading").innerHTML = '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
         setStatus("warn", "Sin configurar");
       }
+      // Asegurar que compareBtn esté visible al arrancar en 24h
+      document.getElementById("compareToggleBtn").style.display = "";
     });
 
     function saveApiUrl() {
@@ -791,6 +793,19 @@ function fillGaps(data, period) {
       currentPeriod = period;
       document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
+
+      // ── NUEVO: ocultar/mostrar botón comparar según período ──
+      const compareBtn = document.getElementById("compareToggleBtn");
+      if (period !== "24h") {
+        compareBtn.style.display = "none";
+        // Cerrar panel si estaba abierto
+        document.getElementById("comparePanel").classList.remove("visible");
+        compareBtn.classList.remove("active");
+        selectedCompareDays = [];
+      } else {
+        compareBtn.style.display = "";
+      }
+
       const titles = {"24h":"últimas 24h","7d":"últimos 7 días","30d":"últimos 30 días"};
       document.getElementById("chartTitle").textContent = "Historial de temperatura — "+titles[period];
       document.getElementById("chartLoading").style.display = "flex";
