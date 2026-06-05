@@ -542,27 +542,50 @@ async function fetchCompareData(targetDay) {
       }
     }
 
-    function fillGaps(data, period) {
-      const now     = new Date();
-      const msBack  = {"24h": 24*60*60*1000, "7d": 7*24*60*60*1000, "30d": 30*24*60*60*1000};
-      const start   = new Date(now.getTime() - (msBack[period] || msBack["24h"]));
-      // Para 30d usamos intervalo diario (1 punto por día)
-      const intervalMin = period === "24h" ? 5 : period === "7d" ? 60 : 1440;
-      const intervalMs  = intervalMin * 60 * 1000;
-      const dataMap = new Map();
-      for (const d of data) {
-        const slot = Math.round(new Date(d.timestamp).getTime() / intervalMs) * intervalMs;
-        if (!dataMap.has(slot)) dataMap.set(slot, d);
-      }
-      const result = [];
-      let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
-      while (cursor <= now.getTime()) {
-        const existing = dataMap.get(cursor);
-        result.push(existing || {timestamp: new Date(cursor).toISOString(), temperature: null, minTemp: null, maxTemp: null, rssi: null});
+function fillGaps(data, period) {
+    const now     = new Date();
+    const msBack  = {"24h": 24*60*60*1000, "7d": 7*24*60*60*1000, "30d": 30*24*60*60*1000};
+    const start   = new Date(now.getTime() - (msBack[period] || msBack["24h"]));
+    const intervalMin = period === "24h" ? 5 : period === "7d" ? 60 : 1440;
+    const intervalMs  = intervalMin * 60 * 1000;
+
+    // Para cada slot buscar el registro más cercano dentro de ±(intervalo/2)
+    const tolerance = intervalMs / 2;
+
+    // Ordenar data por timestamp para búsqueda eficiente
+    const sorted = [...data].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    const result = [];
+    let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
+
+    while (cursor <= now.getTime()) {
+        // Buscar registro más cercano al slot dentro de la tolerancia
+        let best     = null;
+        let bestDiff = Infinity;
+
+        for (const d of sorted) {
+            const t    = new Date(d.timestamp).getTime();
+            const diff = Math.abs(t - cursor);
+            if (diff <= tolerance && diff < bestDiff) {
+                best     = d;
+                bestDiff = diff;
+            }
+            // Como está ordenado, si ya pasamos el slot podemos salir
+            if (t > cursor + tolerance) break;
+        }
+
+        result.push(best || {
+            timestamp:   new Date(cursor).toISOString(),
+            temperature: null,
+            minTemp:     null,
+            maxTemp:     null,
+            rssi:        null
+        });
+
         cursor += intervalMs;
-      }
-      return result;
     }
+    return result;
+}
 
     // ── KPIs ──────────────────────────────────────────────────
     function renderKPIs(data) {
