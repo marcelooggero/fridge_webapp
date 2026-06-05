@@ -336,8 +336,6 @@
         document.getElementById("chartLoading").innerHTML = '<span style="color:var(--text3);font-size:.8rem">Configurá la URL de la API arriba para comenzar.</span>';
         setStatus("warn", "Sin configurar");
       }
-      // Asegurar que compareBtn esté visible al arrancar en 24h
-      document.getElementById("compareToggleBtn").style.display = "";
     });
 
     function saveApiUrl() {
@@ -395,7 +393,7 @@
       const wrap  = document.getElementById("calendarWrap");
       const today = new Date().toISOString().slice(0, 10);
       wrap.innerHTML = "";
-      const days  = [...availableDays].filter(d => d !== today);
+      const days  = [...availableDays].reverse().filter(d => d !== today);
       if (days.length === 0) {
         wrap.innerHTML = '<span style="font-size:.75rem;color:var(--text3)">No hay datos históricos disponibles aún.</span>';
         return;
@@ -424,35 +422,17 @@
       loadData();
     }
 
-async function fetchCompareData(targetDay) {
-    const today  = new Date(); today.setHours(0,0,0,0);
-    const target = new Date(targetDay + "T00:00:00");
-    
-    // offsetDays = días entre el inicio del período target y el inicio del período actual
-    // Para 24h: offset = días entre targetDay y hoy
-    // Para 7d/30d: offset = días entre el lunes/día1 de esa semana/mes y el actual
-    let offsetDays;
-    
-    if (currentPeriod === "24h") {
-        // Comparar ese día exacto
-        offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
-    } else if (currentPeriod === "7d") {
-        // Buscar los 7 días que terminan en targetDay
-        // El período actual es los últimos 7 días terminando hoy
-        // El período comparado es los 7 días terminando en targetDay
-        offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
-    } else {
-        // 30d: igual lógica
-        offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
-    }
-
-    try {
+    async function fetchCompareData(targetDay) {
+      const today  = new Date(); today.setHours(0,0,0,0);
+      const target = new Date(targetDay + "T00:00:00");
+      const offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
+      try {
         const res  = await fetch(`${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}`);
         if (!res.ok) return [];
         const data = await res.json();
         return Array.isArray(data) ? data : [];
-    } catch { return []; }
-}
+      } catch { return []; }
+    }
 
     // ── DATA ──────────────────────────────────────────────────
     async function loadData() {
@@ -491,41 +471,22 @@ async function fetchCompareData(targetDay) {
 
         // Compare datasets
         const cmpDatasets = [];
-         for (let i = 0; i < selectedCompareDays.length; i++) {
+        for (let i = 0; i < selectedCompareDays.length; i++) {
           const day = selectedCompareDays[i];
           const d   = await fetchCompareData(day);
           if (d.length) {
             const sorted = d.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-
             const todayMidnight  = new Date(); todayMidnight.setHours(0,0,0,0);
-            const targetMidnight = new Date(day + "T00:00:00");  // ← day, no targetDay
-            const offsetDays     = Math.round((todayMidnight.getTime() - targetMidnight.getTime()) / (24*60*60*1000));
-            const shiftMs        = offsetDays * 24 * 60 * 60 * 1000;
-
-            console.log('=== COMPARE DEBUG ===');
-            console.log('period:', currentPeriod);
-            console.log('day:', day, 'offsetDays:', offsetDays);
-            console.log('shiftMs en días:', shiftMs / (24*60*60*1000));
-            console.log('sorted[0]:', sorted[0]?.timestamp);
-            console.log('sorted last:', sorted[sorted.length-1]?.timestamp);
-
+            const targetMidnight = new Date(day + "T00:00:00");
+            const shiftMs = todayMidnight.getTime() - targetMidnight.getTime();
             const shifted = sorted.map(r => ({
               ...r,
               timestamp: new Date(new Date(r.timestamp).getTime() + shiftMs).toISOString()
             }));
-
-            console.log('shifted[0]:', shifted[0]?.timestamp);
-            console.log('shifted last:', shifted[shifted.length-1]?.timestamp);
-            console.log('finalData[0]:', finalData[0]?.timestamp);
-            console.log('finalData last:', finalData[finalData.length-1]?.timestamp);
-
             const filled = fillGaps(shifted, currentPeriod);
-            console.log('filled con datos:', filled.filter(x => x.temperature !== null).length, 'de', filled.length);
-
             const label  = new Date(day + "T12:00:00").toLocaleString("es-AR", {day:"numeric", month:"short"});
             cmpDatasets.push({ label, data: filled.map(x => x.temperature), color: COMPARE_COLORS[i % COMPARE_COLORS.length] });
           }
-        
         }
 
         // Para 30d mostrar bandas min/max
@@ -544,50 +505,27 @@ async function fetchCompareData(targetDay) {
       }
     }
 
-function fillGaps(data, period) {
-    const now     = new Date();
-    const msBack  = {"24h": 24*60*60*1000, "7d": 7*24*60*60*1000, "30d": 30*24*60*60*1000};
-    const start   = new Date(now.getTime() - (msBack[period] || msBack["24h"]));
-    const intervalMin = period === "24h" ? 5 : period === "7d" ? 60 : 1440;
-    const intervalMs  = intervalMin * 60 * 1000;
-
-    // Para cada slot buscar el registro más cercano dentro de ±(intervalo/2)
-    const tolerance = intervalMs / 2;
-
-    // Ordenar data por timestamp para búsqueda eficiente
-    const sorted = [...data].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    const result = [];
-    let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
-
-    while (cursor <= now.getTime()) {
-        // Buscar registro más cercano al slot dentro de la tolerancia
-        let best     = null;
-        let bestDiff = Infinity;
-
-        for (const d of sorted) {
-            const t    = new Date(d.timestamp).getTime();
-            const diff = Math.abs(t - cursor);
-            if (diff <= tolerance && diff < bestDiff) {
-                best     = d;
-                bestDiff = diff;
-            }
-            // Como está ordenado, si ya pasamos el slot podemos salir
-            if (t > cursor + tolerance) break;
-        }
-
-        result.push(best || {
-            timestamp:   new Date(cursor).toISOString(),
-            temperature: null,
-            minTemp:     null,
-            maxTemp:     null,
-            rssi:        null
-        });
-
+    function fillGaps(data, period) {
+      const now     = new Date();
+      const msBack  = {"24h": 24*60*60*1000, "7d": 7*24*60*60*1000, "30d": 30*24*60*60*1000};
+      const start   = new Date(now.getTime() - (msBack[period] || msBack["24h"]));
+      // Para 30d usamos intervalo diario (1 punto por día)
+      const intervalMin = period === "24h" ? 5 : period === "7d" ? 60 : 1440;
+      const intervalMs  = intervalMin * 60 * 1000;
+      const dataMap = new Map();
+      for (const d of data) {
+        const slot = Math.round(new Date(d.timestamp).getTime() / intervalMs) * intervalMs;
+        if (!dataMap.has(slot)) dataMap.set(slot, d);
+      }
+      const result = [];
+      let cursor = Math.ceil(start.getTime() / intervalMs) * intervalMs;
+      while (cursor <= now.getTime()) {
+        const existing = dataMap.get(cursor);
+        result.push(existing || {timestamp: new Date(cursor).toISOString(), temperature: null, minTemp: null, maxTemp: null, rssi: null});
         cursor += intervalMs;
+      }
+      return result;
     }
-    return result;
-}
 
     // ── KPIs ──────────────────────────────────────────────────
     function renderKPIs(data) {
@@ -633,6 +571,7 @@ function fillGaps(data, period) {
     }
 
     // ── CHART ─────────────────────────────────────────────────
+    // ── CHART ─────────────────────────────────────────────────
     function renderChart(data, cmpDatasets = [], showBands = false) {
       document.getElementById("chartLoading").style.display = "none";
       const canvas = document.getElementById("tempChart");
@@ -640,90 +579,112 @@ function fillGaps(data, period) {
       document.getElementById("chartMeta").textContent =
         data.filter(d => d.temperature !== null).length + " registros";
 
-      const isDark    = document.documentElement.getAttribute("data-theme") === "dark";
-      const tickColor = isDark ? "#3a6080" : "#7a9ab8";
-      const gridColor = isDark ? "rgba(26,48,80,0.5)" : "rgba(150,180,210,0.4)";
+      const isDark     = document.documentElement.getAttribute("data-theme") === "dark";
+      const tickColor  = isDark ? "#3a6080" : "#7a9ab8";
+      const gridColor  = isDark ? "rgba(26,48,80,0.5)" : "rgba(150,180,210,0.4)";
       const tooltipBg  = isDark ? "#091628" : "#ffffff";
       const tooltipBdr = isDark ? "#1a3050" : "#c8d8e8";
+      const dayLineColor  = isDark ? "rgba(0,200,255,0.25)" : "rgba(0,119,204,0.2)";
+      const dayLabelColor = isDark ? "#3a6080" : "#7a9ab8";
 
-      const labels   = data.map(d => formatTime(d.timestamp));
+      // Labels eje X: solo hora
+      const labels   = data.map(d => new Date(d.timestamp).toLocaleTimeString("es-AR", {hour:"2-digit", minute:"2-digit"}));
       const values   = data.map(d => d.temperature);
       const highLine = data.map(() => thresholds.high);
       const lowLine  = data.map(() => thresholds.low);
 
+      // Detectar cambios de día para el plugin separador
+      const dayChanges = [];
+      let lastDay = null;
+      data.forEach((d, i) => {
+        const day = new Date(d.timestamp).toLocaleDateString("es-AR", {weekday:"short", day:"numeric", month:"short"});
+        if (day !== lastDay) { dayChanges.push({index: i, label: day}); lastDay = day; }
+      });
+
       if (chart) { chart.destroy(); chart = null; }
 
-      const datasets = [
-        {
-          label: "Temperatura" + (showBands ? " (promedio diario)" : ""),
-          data: values,
-          borderColor: "#00c8ff",
-          backgroundColor: "rgba(0,200,255,0.06)",
-          borderWidth: 2,
-          pointRadius: data.length > 200 ? 0 : 3,
-          pointHoverRadius: 5,
-          tension: 0.3,
-          fill: true,
-          spanGaps: false
-        }
-      ];
+      const datasets = [{
+        label: "Temperatura" + (showBands ? " (promedio diario)" : ""),
+        data: values,
+        borderColor: "#00c8ff",
+        backgroundColor: "rgba(0,200,255,0.06)",
+        borderWidth: 2,
+        pointRadius: data.length > 200 ? 0 : 3,
+        pointHoverRadius: 5,
+        tension: 0.3,
+        fill: true,
+        spanGaps: false
+      }];
 
-      // Bandas min/max para 30d
       if (showBands) {
         datasets.push(
-          {
-            label: "Máxima diaria",
-            data: data.map(d => d.maxTemp),
-            borderColor: "rgba(0,200,255,0.25)",
-            backgroundColor: "rgba(0,200,255,0.06)",
-            borderWidth: 1,
-            pointRadius: 0,
-            tension: 0.3,
-            fill: "+1",
-            spanGaps: false
-          },
-          {
-            label: "Mínima diaria",
-            data: data.map(d => d.minTemp),
-            borderColor: "rgba(0,200,255,0.25)",
-            backgroundColor: "rgba(0,200,255,0.06)",
-            borderWidth: 1,
-            pointRadius: 0,
-            tension: 0.3,
-            fill: false,
-            spanGaps: false
-          }
+          { label: "Máxima diaria", data: data.map(d => d.maxTemp), borderColor: "rgba(0,200,255,0.25)", backgroundColor: "rgba(0,200,255,0.06)", borderWidth: 1, pointRadius: 0, tension: 0.3, fill: "+1", spanGaps: false },
+          { label: "Mínima diaria", data: data.map(d => d.minTemp), borderColor: "rgba(0,200,255,0.25)", backgroundColor: "rgba(0,200,255,0.06)", borderWidth: 1, pointRadius: 0, tension: 0.3, fill: false, spanGaps: false }
         );
       }
 
-      // Compare datasets
       cmpDatasets.forEach(c => {
-        datasets.push({
-          label: c.label,
-          data: c.data,
-          borderColor: c.color,
-          backgroundColor: "transparent",
-          borderWidth: 1.5,
-          pointRadius: 0,
-          tension: 0.3,
-          fill: false,
-          spanGaps: false,
-          borderDash: [4, 3]
-        });
+        datasets.push({ label: c.label, data: c.data, borderColor: c.color, backgroundColor: "transparent", borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, spanGaps: false, borderDash: [4,3] });
       });
 
-      // Límites
       datasets.push(
         { label: "Límite alto", data: highLine, borderColor: "rgba(255,107,53,0.6)", borderWidth: 1, borderDash: [4,4], pointRadius: 0, fill: false },
         { label: "Límite bajo", data: lowLine,  borderColor: "rgba(167,139,250,0.6)", borderWidth: 1, borderDash: [4,4], pointRadius: 0, fill: false }
       );
 
+      // Plugin separador de días
+      const daySeparatorPlugin = {
+        id: "daySeparator",
+        afterDraw(chartInstance) {
+          const ctx   = chartInstance.ctx;
+          const xAxis = chartInstance.scales.x;
+          const yAxis = chartInstance.scales.y;
+          const top   = yAxis.top;
+          const bot   = yAxis.bottom;
+
+          // Dibujar etiqueta del primer día al inicio
+          if (dayChanges.length > 0) {
+            ctx.save();
+            ctx.font      = "10px DM Mono, monospace";
+            ctx.fillStyle = dayLabelColor;
+            ctx.textAlign = "left";
+            ctx.fillText(dayChanges[0].label, xAxis.left, bot + 34);
+            ctx.restore();
+          }
+
+          // Dibujar línea y etiqueta en cada cambio de día
+          dayChanges.slice(1).forEach(({index, label}) => {
+            const x = xAxis.getPixelForValue(index);
+            if (x < xAxis.left || x > xAxis.right) return;
+
+            ctx.save();
+            // Línea vertical punteada
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = dayLineColor;
+            ctx.lineWidth   = 1;
+            ctx.moveTo(x, top);
+            ctx.lineTo(x, bot + 22);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Etiqueta del día
+            ctx.font      = "10px DM Mono, monospace";
+            ctx.fillStyle = dayLabelColor;
+            ctx.textAlign = "center";
+            ctx.fillText(label, x, bot + 34);
+            ctx.restore();
+          });
+        }
+      };
+
       chart = new Chart(canvas, {
         type: "line",
         data: { labels, datasets },
+        plugins: [daySeparatorPlugin],
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: { padding: { bottom: 28 } },
           interaction: { mode: "index", intersect: false },
           plugins: {
             legend: { labels: { color: tickColor, font: {family:"DM Mono",size:11}, boxWidth: 12 } },
@@ -731,12 +692,16 @@ function fillGaps(data, period) {
               backgroundColor: tooltipBg, borderColor: tooltipBdr, borderWidth: 1,
               titleColor: tickColor, bodyColor: isDark ? "#e8f4ff" : "#0a1a2e",
               callbacks: {
+                title: items => {
+                  const d = data[items[0].dataIndex];
+                  return d ? formatTime(d.timestamp) : items[0].label;
+                },
                 label: item => ` ${item.dataset.label}: ${item.raw !== null ? Number(item.raw).toFixed(2)+"°C" : "—"}`
               }
             }
           },
           scales: {
-            x: { ticks: { color: tickColor, font:{family:"DM Mono",size:10}, maxTicksLimit:8, maxRotation:0 }, grid: { color: gridColor } },
+            x: { ticks: { color: tickColor, font:{family:"DM Mono",size:10}, maxTicksLimit:8, maxRotation:0, padding:4 }, grid: { color: gridColor } },
             y: { ticks: { color: tickColor, font:{family:"DM Mono",size:10}, callback: v => `${v}°C` }, grid: { color: gridColor } }
           }
         }
@@ -793,19 +758,6 @@ function fillGaps(data, period) {
       currentPeriod = period;
       document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-
-      // ── NUEVO: ocultar/mostrar botón comparar según período ──
-      const compareBtn = document.getElementById("compareToggleBtn");
-      if (period !== "24h") {
-        compareBtn.style.display = "none";
-        // Cerrar panel si estaba abierto
-        document.getElementById("comparePanel").classList.remove("visible");
-        compareBtn.classList.remove("active");
-        selectedCompareDays = [];
-      } else {
-        compareBtn.style.display = "";
-      }
-
       const titles = {"24h":"últimas 24h","7d":"últimos 7 días","30d":"últimos 30 días"};
       document.getElementById("chartTitle").textContent = "Historial de temperatura — "+titles[period];
       document.getElementById("chartLoading").style.display = "flex";
