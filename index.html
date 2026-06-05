@@ -653,12 +653,15 @@
           }
 
           // Dibujar línea y etiqueta en cada cambio de día
-          dayChanges.slice(1).forEach(({index, label}) => {
+          // Para 30d mostrar etiqueta solo cada 5 días para evitar solapamiento
+          const labelEvery = currentPeriod === "30d" ? 5 : 1;
+
+          dayChanges.slice(1).forEach(({index, label}, i) => {
             const x = xAxis.getPixelForValue(index);
             if (x < xAxis.left || x > xAxis.right) return;
 
             ctx.save();
-            // Línea vertical punteada
+            // Línea vertical punteada siempre
             ctx.beginPath();
             ctx.setLineDash([4, 4]);
             ctx.strokeStyle = dayLineColor;
@@ -667,11 +670,13 @@
             ctx.lineTo(x, bot + 22);
             ctx.stroke();
             ctx.setLineDash([]);
-            // Etiqueta del día
-            ctx.font      = "10px DM Mono, monospace";
-            ctx.fillStyle = dayLabelColor;
-            ctx.textAlign = "center";
-            ctx.fillText(label, x, bot + 34);
+            // Etiqueta solo cada N días
+            if ((i + 1) % labelEvery === 0) {
+              ctx.font      = "10px DM Mono, monospace";
+              ctx.fillStyle = dayLabelColor;
+              ctx.textAlign = "center";
+              ctx.fillText(label, x, bot + 34);
+            }
             ctx.restore();
           });
         }
