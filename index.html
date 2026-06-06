@@ -8,9 +8,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050e1a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Cámara Fría" />
     <link rel="manifest" href="manifest.json" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
     <title>Cámara Fría — Monitor</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
@@ -499,59 +503,91 @@
 
     function applyTranslations() {
       const isES = currentLang === "es";
+
+      // Helper: safe set textContent
+      const setText = (sel, key, isId=false) => {
+        const el = isId ? document.getElementById(sel) : document.querySelector(sel);
+        if (el) el.textContent = t(key);
+      };
+      const setHtml = (sel, key) => {
+        const el = document.querySelector(sel);
+        if (el) el.innerHTML = t(key);
+      };
+
       // Language toggle
       const langToggle = document.getElementById("langToggle");
-      const langFlag   = document.getElementById("langFlag");
-      if (langToggle) {
-        langToggle.className = "lang-toggle" + (isES ? "" : " en");
-        langFlag.textContent  = isES ? "🇦🇷" : "🇺🇸";
-      }
+      if (langToggle) langToggle.className = "lang-toggle " + (isES ? "lang-es" : "lang-en");
+
       // Theme button
       const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-      document.getElementById("themeBtn").textContent = isDark ? t("themeLight") : t("themeDark");
+      setText("themeBtn", isDark ? "themeLight" : "themeDark", true);
+
       // Status
-      document.getElementById("statusText").textContent = t("statusConnecting");
+      setText("statusText", "statusConnecting", true);
+
       // KPI labels
-      document.querySelectorAll(".kpi-label")[0].textContent = t("kpiCurrent");
-      document.querySelectorAll(".kpi-label")[1].textContent = t("kpiMin");
-      document.querySelectorAll(".kpi-label")[2].textContent = t("kpiMax");
-      document.querySelectorAll(".kpi-label")[3].textContent = t("kpiAvg");
-      // Chart title
-      const titles = { "24h": t("chartTitle24h"), "7d": t("chartTitle7d"), "30d": t("chartTitle30d") };
-      document.getElementById("chartTitle").textContent = titles[currentPeriod];
-      // Daily badge
-      document.getElementById("dailyBadge").textContent = t("dailyBadge");
-      // Compare button & panel
-      document.getElementById("compareToggleBtn").textContent = t("compareBtn");
+      const kpiLabels = document.querySelectorAll(".kpi-label");
+      const kpiKeys   = ["kpiCurrent","kpiMin","kpiMax","kpiAvg"];
+      kpiLabels.forEach((el, i) => { if (kpiKeys[i]) el.textContent = t(kpiKeys[i]); });
+
+      // Chart
+      const titleKeys = {"24h":"chartTitle24h","7d":"chartTitle7d","30d":"chartTitle30d"};
+      setText("chartTitle", titleKeys[currentPeriod] || "chartTitle24h", true);
+      setText("dailyBadge", "dailyBadge", true);
+      setText("compareToggleBtn", "compareBtn", true);
+
       // RSSI
-      document.querySelector(".info-card:first-child .info-card-title").textContent = t("rssiTitle");
-      document.querySelectorAll(".rssi-label")[0].textContent = t("rssiCurrent");
-      document.querySelectorAll(".rssi-label")[1].textContent = t("rssiAvg");
-      document.querySelectorAll(".rssi-label")[2].textContent = t("rssiMin");
-      document.querySelector(".rssi-wrap + div").innerHTML = t("rssiLegend");
+      const rssiCard = document.querySelector(".info-card:first-child");
+      if (rssiCard) {
+        const title = rssiCard.querySelector(".info-card-title");
+        if (title) title.textContent = t("rssiTitle");
+        const labels = rssiCard.querySelectorAll(".rssi-label");
+        ["rssiCurrent","rssiAvg","rssiMin"].forEach((k,i) => { if (labels[i]) labels[i].textContent = t(k); });
+        const legend = rssiCard.querySelector(".rssi-wrap + div");
+        if (legend) legend.innerHTML = t("rssiLegend");
+      }
+
       // Stats card
-      document.querySelector(".info-card:last-child .info-card-title").textContent = t("statsTitle");
-      const statsTds = document.querySelectorAll(".stats-table td:first-child");
-      if (statsTds[0]) statsTds[0].textContent = t("statsCount");
-      if (statsTds[1]) statsTds[1].textContent = t("statsLast");
-      if (statsTds[2]) statsTds[2].textContent = t("statsRange");
-      if (statsTds[3]) statsTds[3].textContent = t("statsOut");
-      // Buttons
-      document.querySelector(".threshold-row:first-of-type label").textContent = t("threshMax");
-      document.querySelector(".threshold-row:last-of-type label").textContent  = t("threshMin");
-      document.querySelector(".threshold-save").textContent = t("threshSave");
-      document.querySelector(".export-btn").textContent     = t("exportBtn");
+      const statsCard = document.querySelector(".info-card:last-child");
+      if (statsCard) {
+        const title = statsCard.querySelector(".info-card-title");
+        if (title) title.textContent = t("statsTitle");
+        const tds = statsCard.querySelectorAll(".stats-table td:first-child");
+        ["statsCount","statsLast","statsRange","statsOut"].forEach((k,i) => { if (tds[i]) tds[i].textContent = t(k); });
+        const threshRows = statsCard.querySelectorAll(".threshold-row label");
+        if (threshRows[0]) threshRows[0].textContent = t("threshMax");
+        if (threshRows[1]) threshRows[1].textContent = t("threshMin");
+        const saveBtn   = statsCard.querySelector(".threshold-save");
+        const exportBtn = statsCard.querySelector(".export-btn");
+        if (saveBtn)   saveBtn.textContent   = t("threshSave");
+        if (exportBtn) exportBtn.textContent = t("exportBtn");
+      }
+
       // Config banner
-      document.querySelector(".config-banner span").textContent = t("configPrompt");
-      document.querySelector(".config-banner button").textContent = t("configSave");
+      const configBanner = document.getElementById("configBanner");
+      if (configBanner) {
+        const span = configBanner.querySelector("span");
+        const btn  = configBanner.querySelector("button");
+        if (span) span.textContent = t("configPrompt");
+        if (btn)  btn.textContent  = t("configSave");
+      }
+
       // PWA banner
-      document.querySelector(".pwa-banner span").textContent = t("pwaBanner");
-      document.querySelector(".pwa-install-btn").textContent = t("pwaInstall");
-      // Compare panel title
-      const cmpTitle = document.querySelector(".compare-panel div:first-child");
-      if (cmpTitle) cmpTitle.textContent = t("compareTitle");
-      // Compare legend
-      const legSel = document.getElementById("legendSelected");
+      const pwaBanner = document.getElementById("pwaBanner");
+      if (pwaBanner) {
+        const span = pwaBanner.querySelector("span");
+        const btn  = pwaBanner.querySelector(".pwa-install-btn");
+        if (span) span.textContent = t("pwaBanner");
+        if (btn)  btn.textContent  = t("pwaInstall");
+      }
+
+      // Compare panel
+      const cmpPanel = document.getElementById("comparePanel");
+      if (cmpPanel) {
+        const title  = cmpPanel.querySelector("div:first-child");
+        if (title) title.textContent = t("compareTitle");
+      }
+      const legSel  = document.getElementById("legendSelected");
       const legData = document.getElementById("legendWithData");
       if (legSel)  legSel.textContent  = t("compareSelected");
       if (legData) legData.textContent = t("compareWithData");
