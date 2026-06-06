@@ -148,6 +148,48 @@
         .rssi-label { font-size: .7rem; min-width: 50px; } .rssi-val { font-size: .7rem; }
         .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
       }
+
+      /* ── LANGUAGE TOGGLE ──────────────────────────────────── */
+      .lang-toggle {
+        position: relative;
+        width: 64px;
+        height: 28px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--bg3);
+        cursor: pointer;
+        transition: border-color .2s;
+        overflow: hidden;
+        flex-shrink: 0;
+        user-select: none;
+      }
+      .lang-toggle:hover { border-color: var(--accent); }
+      .lang-track {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 4px;
+        font-size: .85rem;
+        line-height: 1;
+        pointer-events: none;
+      }
+      .lang-flag { display: flex; align-items: center; line-height: 1; }
+      .lang-thumb {
+        position: absolute;
+        top: 2px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        box-shadow: 0 1px 4px rgba(0,0,0,.4);
+        transition: left .25s cubic-bezier(.4,0,.2,1);
+        pointer-events: none;
+      }
+      .lang-toggle.lang-es .lang-thumb { left: 2px; }
+      .lang-toggle.lang-en .lang-thumb { left: 38px; }
     </style>
   </head>
   <body>
@@ -156,7 +198,13 @@
       <div class="header-right">
         <span class="last-update" id="lastUpdate">—</span>
         <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀ Claro</button>
-        <button class="lang-btn" onclick="toggleLang()" id="langBtn" title="Change language">🇦🇷</button>
+        <div class="lang-toggle lang-es" onclick="toggleLang()" id="langToggle" title="Change language">
+          <div class="lang-track">
+            <span class="lang-flag">🇦🇷</span>
+            <span class="lang-flag">🇺🇸</span>
+          </div>
+          <div class="lang-thumb" id="langThumb"></div>
+        </div>
         <div class="status-pill">
           <div class="dot" id="statusDot"></div>
           <span id="statusText">Conectando...</span>
@@ -446,14 +494,18 @@
       currentLang = currentLang === "es" ? "en" : "es";
       localStorage.setItem(STORAGE_KEY_LANG, currentLang);
       applyTranslations();
-      // Reload data to refresh dates/labels
       if (chart) loadData();
     }
 
     function applyTranslations() {
       const isES = currentLang === "es";
-      // Flag button
-      document.getElementById("langBtn").textContent = isES ? "🇦🇷" : "🇺🇸";
+      // Language toggle
+      const langToggle = document.getElementById("langToggle");
+      const langFlag   = document.getElementById("langFlag");
+      if (langToggle) {
+        langToggle.className = "lang-toggle" + (isES ? "" : " en");
+        langFlag.textContent  = isES ? "🇦🇷" : "🇺🇸";
+      }
       // Theme button
       const isDark = document.documentElement.getAttribute("data-theme") === "dark";
       document.getElementById("themeBtn").textContent = isDark ? t("themeLight") : t("themeDark");
