@@ -153,6 +153,21 @@
         .alert-bar { font-size: .75rem; padding: .6rem 1rem; border-radius: 6px; }
       }
 
+      /* ── DEVICE SELECTOR ─────────────────────────────────── */
+      .device-selector { display: flex; gap: .35rem; align-items: center; }
+      .device-btn {
+        background: transparent; border: 1px solid var(--border); color: var(--text2);
+        border-radius: 6px; padding: .3rem .75rem; font-family: var(--font-mono);
+        font-size: .7rem; cursor: pointer; transition: all .2s; letter-spacing: .05em;
+        white-space: nowrap;
+      }
+      .device-btn:hover { border-color: var(--accent); color: var(--accent); }
+      .device-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500; }
+
+      /* ── HUMIDITY KPI ─────────────────────────────────────── */
+      .kpi-hum { display: none; }
+      .kpi-hum.visible { display: block; }
+
       /* ── LANGUAGE TOGGLE ──────────────────────────────────── */
       .lang-toggle {
         position: relative;
@@ -200,6 +215,10 @@
     <header>
       <div class="logo">CÁMARA<span>FRÍA</span></div>
       <div class="header-right">
+        <div class="device-selector">
+          <button class="device-btn active" id="devBtn1" onclick="selectDevice('camaraFrio', this)">❄ Cámara 1</button>
+          <button class="device-btn" id="devBtn2" onclick="selectDevice('camaraFrio2', this)">💧 Cámara 2</button>
+        </div>
         <span class="last-update" id="lastUpdate">—</span>
         <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀ Claro</button>
         <div class="lang-toggle lang-es" onclick="toggleLang()" id="langToggle" title="Change language">
@@ -256,6 +275,16 @@
           <div class="kpi-value small" id="valAvg">—<span class="kpi-unit">°C</span></div>
           <div class="kpi-sub" id="subAvg">—</div>
         </div>
+        <div class="kpi kpi-hum" id="kpiHumidity">
+          <div class="kpi-label" id="kpiHumLabel">Humedad actual</div>
+          <div class="kpi-value small" id="valHumidity">—<span class="kpi-unit">%</span></div>
+          <div class="kpi-sub" id="subHumidity">—</div>
+        </div>
+        <div class="kpi kpi-hum" id="kpiHumAvg">
+          <div class="kpi-label">Promedio humedad</div>
+          <div class="kpi-value small" id="valHumAvg">—<span class="kpi-unit">%</span></div>
+          <div class="kpi-sub" id="subHumAvg">—</div>
+        </div>
       </div>
 
       <div class="chart-card">
@@ -311,6 +340,8 @@
           <div style="margin-top:1rem">
             <div class="threshold-row"><label>Máx alerta</label><input type="number" id="threshHigh" value="-10" step="0.5"><span style="font-size:.7rem;color:var(--text3)">°C</span></div>
             <div class="threshold-row"><label>Mín alerta</label><input type="number" id="threshLow" value="-25" step="0.5"><span style="font-size:.7rem;color:var(--text3)">°C</span></div>
+            <div class="threshold-row kpi-hum" id="threshHumHighRow"><label>Máx humedad</label><input type="number" id="threshHumHigh" value="85" step="1"><span style="font-size:.7rem;color:var(--text3)">%</span></div>
+            <div class="threshold-row kpi-hum" id="threshHumLowRow"><label>Mín humedad</label><input type="number" id="threshHumLow" value="40" step="1"><span style="font-size:.7rem;color:var(--text3)">%</span></div>
             <button class="threshold-save" onclick="saveThresholds()">Guardar umbrales</button>
             <button class="export-btn" onclick="exportCSV()">⬇ Exportar CSV</button>
           </div>
@@ -323,9 +354,36 @@
     const STORAGE_KEY_URL    = "fridgeApiUrl";
     const STORAGE_KEY_THRESH = "fridgeThresholds";
     const STORAGE_KEY_THEME  = "fridgeTheme";
+    const STORAGE_KEY_DEVICE = "fridgeDevice";
     const REFRESH_MS         = 60000;
 
     let apiUrl        = localStorage.getItem(STORAGE_KEY_URL) || `${API_BASE}/getTemperatureHistory`;
+    let currentDevice = localStorage.getItem(STORAGE_KEY_DEVICE) || "camaraFrio";
+
+    function selectDevice(deviceId, btn) {
+      currentDevice = deviceId;
+      localStorage.setItem(STORAGE_KEY_DEVICE, deviceId);
+      document.querySelectorAll(".device-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const isC2 = deviceId === "camaraFrio2";
+
+      // Mostrar/ocultar KPIs y umbrales de humedad
+      document.querySelectorAll(".kpi-hum").forEach(el => {
+        el.classList.toggle("visible", isC2);
+      });
+
+      // Resetear compare al cambiar de cámara
+      selectedCompareDays = [];
+      availableDays = [];
+      document.getElementById("comparePanel").classList.remove("visible");
+      const compareBtn = document.getElementById("compareToggleBtn");
+      if (compareBtn) compareBtn.classList.remove("active");
+
+      // Recargar thresholds y datos
+      loadThresholds();
+      loadData();
+    }
 
     // ── TRANSLATIONS ──────────────────────────────────────────
     const STORAGE_KEY_LANG = "fridgeLang";
@@ -634,23 +692,39 @@
     }
 
     // ── INIT ──────────────────────────────────────────────────
-    document.addEventListener("DOMContentLoaded", async () => {
-      const savedTheme = localStorage.getItem(STORAGE_KEY_THEME) || "dark";
-      document.documentElement.setAttribute("data-theme", savedTheme);
-      currentLang = localStorage.getItem(STORAGE_KEY_LANG) || "es";
-      applyTranslations();
-      document.getElementById("themeBtn").textContent = savedTheme === "dark" ? t("themeLight") : t("themeDark");
+    async function loadThresholds() {
       try {
-        const res = await fetch(`${API_BASE}/getThresholds`);
+        const res = await fetch(`${API_BASE}/getThresholds?deviceId=${currentDevice}`);
         if (res.ok) {
           const data = await res.json();
           thresholds.high = data.alertTempHigh;
           thresholds.low  = data.alertTempLow;
           localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+          document.getElementById("threshHigh").value = thresholds.high;
+          document.getElementById("threshLow").value  = thresholds.low;
+          if (data.alertHumidityHigh !== undefined) {
+            document.getElementById("threshHumHigh").value = data.alertHumidityHigh;
+            document.getElementById("threshHumLow").value  = data.alertHumidityLow;
+          }
         }
       } catch (err) { console.warn("Error cargando umbrales:", err.message); }
-      document.getElementById("threshHigh").value = thresholds.high;
-      document.getElementById("threshLow").value  = thresholds.low;
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const savedTheme = localStorage.getItem(STORAGE_KEY_THEME) || "dark";
+      document.documentElement.setAttribute("data-theme", savedTheme);
+      currentLang = localStorage.getItem(STORAGE_KEY_LANG) || "es";
+      currentDevice = localStorage.getItem(STORAGE_KEY_DEVICE) || "camaraFrio";
+      applyTranslations();
+      document.getElementById("themeBtn").textContent = savedTheme === "dark" ? t("themeLight") : t("themeDark");
+
+      // Restaurar botón de cámara activo
+      const isC2 = currentDevice === "camaraFrio2";
+      document.getElementById("devBtn1").classList.toggle("active", !isC2);
+      document.getElementById("devBtn2").classList.toggle("active", isC2);
+      document.querySelectorAll(".kpi-hum").forEach(el => el.classList.toggle("visible", isC2));
+
+      await loadThresholds();
       document.getElementById("configBanner").classList.add("hidden");
       if (apiUrl) { loadData(); setInterval(loadData, REFRESH_MS); }
       else {
@@ -672,10 +746,21 @@
       thresholds.high = parseFloat(document.getElementById("threshHigh").value);
       thresholds.low  = parseFloat(document.getElementById("threshLow").value);
       localStorage.setItem(STORAGE_KEY_THRESH, JSON.stringify(thresholds));
+
+      const body = {
+        deviceId: currentDevice,
+        alertTempHigh: thresholds.high,
+        alertTempLow:  thresholds.low,
+      };
+      if (currentDevice === "camaraFrio2") {
+        body.alertHumidityHigh = parseFloat(document.getElementById("threshHumHigh").value);
+        body.alertHumidityLow  = parseFloat(document.getElementById("threshHumLow").value);
+      }
+
       try {
         const res = await fetch(`${API_BASE}/updateThresholds`, {
           method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({alertTempHigh: thresholds.high, alertTempLow: thresholds.low})
+          body: JSON.stringify(body)
         });
         if (res.ok) {
           document.getElementById("statRange").textContent = `${thresholds.low}°C — ${thresholds.high}°C`;
@@ -702,7 +787,7 @@
 
     async function loadAvailableDays() {
       try {
-        const res  = await fetch(`${API_BASE}/getAvailableDays`);
+        const res  = await fetch(`${API_BASE}/getAvailableDays?deviceId=${currentDevice}`);
         if (!res.ok) return;
         const data = await res.json();
         availableDays = data.availableDays || [];
@@ -748,7 +833,7 @@
       const target = new Date(targetDay + "T00:00:00");
       const offsetDays = Math.round((today.getTime() - target.getTime()) / (24*60*60*1000));
       try {
-        const res  = await fetch(`${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}`);
+        const res  = await fetch(`${API_BASE}/getTemperatureHistory?period=${currentPeriod}&offsetDays=${offsetDays}&deviceId=${currentDevice}`);
         if (!res.ok) return [];
         const data = await res.json();
         return Array.isArray(data) ? data : [];
@@ -758,7 +843,7 @@
     // ── DATA ──────────────────────────────────────────────────
     async function loadData() {
       try {
-        const res = await fetch(`${apiUrl}?period=${currentPeriod}`);
+        const res = await fetch(`${apiUrl}?period=${currentPeriod}&deviceId=${currentDevice}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
@@ -871,6 +956,19 @@
       curEl.className = "kpi-value";
       if (cur > thresholds.high || cur < thresholds.low) curEl.classList.add("warn");
       evaluateAlerts(cur);
+
+      // Humedad — solo para camaraFrio2
+      if (currentDevice === "camaraFrio2") {
+        const humids = data.map(d => d.humidity).filter(v => v !== null && v !== undefined);
+        if (humids.length) {
+          const curHum = latest.humidity ?? humids[humids.length - 1];
+          const avgHum = humids.reduce((a,b) => a+b, 0) / humids.length;
+          document.getElementById("valHumidity").innerHTML = `${curHum.toFixed(1)}<span class="kpi-unit">%</span>`;
+          document.getElementById("valHumAvg").innerHTML   = `${avgHum.toFixed(1)}<span class="kpi-unit">%</span>`;
+          document.getElementById("subHumidity").textContent = formatTime(latest.timestamp);
+          document.getElementById("subHumAvg").textContent   = `${humids.length} registros`;
+        }
+      }
     }
 
     function evaluateAlerts(cur) {
@@ -934,8 +1032,31 @@
         pointHoverRadius: 5,
         tension: 0.3,
         fill: true,
-        spanGaps: false
+        spanGaps: false,
+        yAxisID: "y"
       }];
+
+      // Dataset de humedad para camaraFrio2
+      const humValues = data.map(d => d.humidity ?? null);
+      const hasHumidity = currentDevice === "camaraFrio2" && humValues.some(v => v !== null);
+      if (hasHumidity) {
+        datasets.push({
+          label: "Humedad",
+          data: humValues,
+          borderColor: "rgba(0,229,160,0.8)",
+          backgroundColor: "rgba(0,229,160,0.04)",
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: false,
+          spanGaps: false,
+          yAxisID: "y2"
+        });
+      }
+
+      // Necesario para que y2 axis lo lea en options
+      window._hasHumidity = hasHumidity;
 
       if (showBands) {
         datasets.push(
@@ -1022,13 +1143,24 @@
                   const d = data[items[0].dataIndex];
                   return d ? formatTime(d.timestamp) : items[0].label;
                 },
-                label: item => ` ${item.dataset.label}: ${item.raw !== null ? Number(item.raw).toFixed(2)+"°C" : "—"}`
+                label: item => {
+                  if (item.raw === null) return ` ${item.dataset.label}: —`;
+                  const isHum = item.dataset.yAxisID === "y2";
+                  return ` ${item.dataset.label}: ${Number(item.raw).toFixed(isHum ? 1 : 2)}${isHum ? "%" : "°C"}`;
+                }
               }
             }
           },
           scales: {
             x: { ticks: { color: tickColor, font:{family:"DM Mono",size:10}, maxTicksLimit:8, maxRotation:0, padding:4 }, grid: { color: gridColor } },
-            y: { ticks: { color: tickColor, font:{family:"DM Mono",size:10}, callback: v => `${v}°C` }, grid: { color: gridColor } }
+            y: { ticks: { color: tickColor, font:{family:"DM Mono",size:10}, callback: v => `${v}°C` }, grid: { color: gridColor } },
+            y2: {
+              display: hasHumidity,
+              position: "right",
+              ticks: { color: "rgba(0,229,160,0.7)", font:{family:"DM Mono",size:10}, callback: v => `${v}%` },
+              grid: { drawOnChartArea: false },
+              min: 0, max: 100
+            }
           }
         }
       });
